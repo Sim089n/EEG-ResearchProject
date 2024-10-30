@@ -337,7 +337,11 @@ def main(#num_trustlevels: int = typer.Option(
     plt.xlabel("Number of Clusters")
     plt.ylabel("SSE")
     plt.show()
-
+    # svae plot
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname('plots/elbow_plot.png'), exist_ok=True)
+    plt.savefig('plots/elbow_plot.png')
+    
     # Fit kmeans with 2 clusters for this example
     kmeans = KMeans(init="random", n_clusters=2, n_init=10, max_iter=300, random_state=42)
     y_prediction = kmeans.fit_predict(scaled_features)
@@ -373,6 +377,9 @@ def main(#num_trustlevels: int = typer.Option(
     plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s=200, c='red', label='Centroids')
     plt.legend()
     plt.show()
+    # Ensure the directory exists
+    os.makedirs(os.path.dirname('plots/kmeans_clusters.png'), exist_ok=True)
+    plt.savefig('plots/kmeans_clusters.png')
 
 
 if __name__ == "__main__":
