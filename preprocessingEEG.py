@@ -17,10 +17,12 @@ from scipy.signal import welch
 from scipy.stats import kurtosis
 from scipy.fftpack import fft
 from scipy.optimize import linear_sum_assignment
+from sklearn.model_selection import StratifiedKFold, cross_val_score, cross_val_predict
 from sklearn.datasets import make_blobs
 from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, accuracy_score, precision_score, recall_score, make_scorer
 from sklearn.preprocessing import StandardScaler
+from imblearn.over_sampling import SMOTE
 
 #------------- Define functions to preprocess EEG data --------------# 
 
@@ -281,17 +283,61 @@ def main(#num_trustlevels: int = typer.Option(
 
     # Concatenate the DataFrames to get our dataset --> includes all participants in stages 3 and 4
     alpha_df = pd.concat(df_frames)
-
+    # value_counts pandas function -> count
+    print(alpha_df['label'].value_counts())
+    # make histogram of value counts per label
+    alpha_df['label'].value_counts().plot(kind='bar')
+    plt.show()
     # Split dataset into training set and test set
     X = alpha_df[['Mean', 'Peak', 'Median', 'Std', 'Kurtosis']]  # Features
     y = alpha_df['label']  # Labels
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3,random_state=42) # 70% training and 30% test
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42) # 70% training and 30% test
+
+    # include SMOTE to balance the dataset
+    # Apply SMOTE to create synthetic samples
+    smote = SMOTE(sampling_strategy='auto', random_state=42)
+    X_smote, y_smote = smote.fit_resample(X, y)
+
+
 
     #Create a svm Classifier
-    svm_clf = svm.SVC() # Linear Kernel
+    svm_clf = svm.SVC(C=0.5, class_weight="balanced") # Linear Kernel
+    # Define Stratified K-Folds
+    skf = StratifiedKFold(n_splits=5)  # 5-fold cross-validation
 
+    # Initialize lists to collect scores for each fold
+    accuracy_scores = []
+    precision_scores = []
+    recall_scores = []
+
+    # Loop through each fold
+    for train_index, test_index in skf.split(X_smote, y_smote):
+        X_train_fold, X_test_fold = X_smote.iloc[train_index], X_smote.iloc[test_index]
+        y_train_fold, y_test_fold = y_smote.iloc[train_index], y_smote.iloc[test_index]
+        
+        # Train on fold
+        svm_clf.fit(X_train_fold, y_train_fold)
+        
+        # Predict on test fold
+        y_pred_fold = svm_clf.predict(X_test_fold)
+        
+        # Calculate metrics
+        accuracy_scores.append(accuracy_score(y_test_fold, y_pred_fold))
+        precision_scores.append(precision_score(y_test_fold, y_pred_fold, average='binary'))  # Adjust for binary/multiclass
+        recall_scores.append(recall_score(y_test_fold, y_pred_fold, average='binary'))
+
+    # Calculate average scores
+    avg_accuracy = np.mean(accuracy_scores)
+    avg_precision = np.mean(precision_scores)
+    avg_recall = np.mean(recall_scores)
+    print("---------------------------------------------------------------------")
+    print("SVM Training:")
+    print(f"Average Training Accuracy: {avg_accuracy}")
+    print(f"Average Training Precision: {avg_precision}")
+    print(f"Average Training Recall: {avg_recall}")
+    
     #Train the model using the training sets
-    svm_clf.fit(X_train, y_train)
+    #svm_clf.fit(X_train, y_train)
 
     #Predict the response for test dataset
     y_pred = svm_clf.predict(X_test)
@@ -299,11 +345,15 @@ def main(#num_trustlevels: int = typer.Option(
     print("---------------------------------------------------------------------")
     print("SVM Classification Results:")
     # Model Accuracy: how often is the classifier correct
-    print("Accuracy SVM:",metrics.accuracy_score(y_test, y_pred))
+    print("Accuracy SVM:",metrics.balanced_accuracy_score(y_test, y_pred)) 
     # Model Precision: what percentage of positive tuples are labeled as such
     print("Precision SVM:",metrics.precision_score(y_test, y_pred, average='weighted'))
     # Model Recall: what percentage of positive tuples are labelled as such
     print("Recall SVM:",metrics.recall_score(y_test, y_pred, average='weighted'))
+    # Model F1 Score: weighted average of the precision and recall
+    print("F1 Score SVM:",metrics.f1_score(y_test, y_pred, average='weighted'))
+    # Confusion Matrix
+    print("Confusion Matrix SVM:\n",metrics.confusion_matrix(y_test, y_pred))
 
     #--------------------------------------------- k-means clustering ---------------------------------------------#
 
@@ -311,7 +361,7 @@ def main(#num_trustlevels: int = typer.Option(
     # the labels are the trust_score_binary from the details.csv file
     # the model should be saved as a pickle file and can be used in the main file
     scaler = StandardScaler()
-    scaled_features = scaler.fit_transform(X)
+    scaled_features = scaler.fit_transform(X_smote)
     kmeans_kwargs = {
         "init": "random",
         "n_init": 10,
@@ -319,9 +369,9 @@ def main(#num_trustlevels: int = typer.Option(
         "random_state": 42,
     }
 
-    graph = sns.PairGrid(alpha_df, hue="label")
-    graph.map(sns.scatterplot)
-    graph.add_legend()
+    #graph = sns.PairGrid(alpha_df, hue="label")
+    #graph.map(sns.scatterplot)
+    #graph.add_legend()
 
     # A list holds the SSE values for each k
     sse = []
@@ -341,13 +391,13 @@ def main(#num_trustlevels: int = typer.Option(
     # Ensure the directory exists
     os.makedirs(os.path.dirname('plots/elbow_plot.png'), exist_ok=True)
     plt.savefig('plots/elbow_plot.png')
-    
+
     # Fit kmeans with 2 clusters for this example
     kmeans = KMeans(init="random", n_clusters=2, n_init=10, max_iter=300, random_state=42)
     y_prediction = kmeans.fit_predict(scaled_features)
 
     # Generate the contingency matrix
-    contingency_matrix = metrics.cluster.contingency_matrix(y, y_prediction)
+    contingency_matrix = metrics.cluster.contingency_matrix(y_smote, y_prediction)
 
     # Find the best label alignment using the Hungarian algorithm
     row_ind, col_ind = linear_sum_assignment(-contingency_matrix)
@@ -355,17 +405,22 @@ def main(#num_trustlevels: int = typer.Option(
     for i, j in zip(row_ind, col_ind):
         aligned_labels[y_prediction == j] = i
 
+    # Augmentation approach to balance the amount of high and low trust instances
+    # check what the participants wrote in their questionnaire is represented in the EEG data as well
+    # find the instances where it is not matching -> keep those instances and go back to the features and try to gain information based on the raw and processed data
     # Calculate metrics
-    accuracy = metrics.accuracy_score(y, aligned_labels)
-    precision = metrics.precision_score(y, aligned_labels, average='weighted')
-    recall = metrics.recall_score(y, aligned_labels, average='weighted')
-    f1 = metrics.f1_score(y, aligned_labels, average='weighted')
+    accuracy = metrics.balanced_accuracy_score(y_smote, aligned_labels)
+    precision = metrics.precision_score(y_smote, aligned_labels, average='weighted')
+    recall = metrics.recall_score(y_smote, aligned_labels, average='weighted')
+    f1 = metrics.f1_score(y_smote, aligned_labels, average='weighted')
+    conf_mat = metrics.confusion_matrix(y_smote, aligned_labels)
     print("---------------------------------------------------------------------")
     print("KMeans Clustering Results:")
     print("Silhouette Score:", silhouette_score(scaled_features, aligned_labels))
     print(f"Accuracy k-means: {accuracy:.4f}")
     print(f"Precision k-means: {precision:.4f}")
     print(f"Recall k-means: {recall:.4f}")
+    print(f"Confusion Matrix k-means:\n{conf_mat}")
     print(f"F1 Score k-means: {f1:.4f}")
     print(f"Inertia k-means: {kmeans.inertia_:.4f}")
     print(f"Cluster Centers:", kmeans.cluster_centers_)
