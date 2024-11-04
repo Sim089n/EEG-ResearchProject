@@ -389,7 +389,7 @@ def main(#num_trustlevels: int = typer.Option(
     plt.show()
     # svae plot
     # Ensure the directory exists
-    os.makedirs(os.path.dirname('plots/elbow_plot.png'), exist_ok=True)
+    os.makedirs(os.path.dirname('plots/'), exist_ok=True)
     plt.savefig('plots/elbow_plot.png')
 
     # Fit kmeans with 2 clusters for this example
@@ -433,7 +433,7 @@ def main(#num_trustlevels: int = typer.Option(
     plt.legend()
     plt.show()
     # Ensure the directory exists
-    os.makedirs(os.path.dirname('plots/kmeans_clusters.png'), exist_ok=True)
+    os.makedirs(os.path.dirname('plots/'), exist_ok=True)
     plt.savefig('plots/kmeans_clusters.png')
 
 
