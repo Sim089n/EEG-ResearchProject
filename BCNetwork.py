@@ -6,9 +6,10 @@ from torch.utils.data import DataLoader, TensorDataset, random_split
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import glob
+import numpy as np
 
 class TrustClassifier(nn.Module):
-    def __init__(self):
+    def __init__(self, X_tensor):
         super(TrustClassifier, self).__init__()
         self.fc1 = nn.Linear(X_tensor.shape[1], 64)
         self.fc2 = nn.Linear(64, 32)
@@ -34,7 +35,7 @@ for file in glob.glob('labeled_Alpha_*.csv'): # os.path.join(path_labeled_csvfil
     # Concatenate the DataFrames to get our dataset --> includes all participants in stages 3 and 4
     alpha_df = pd.concat(df_frames)
 
-model = TrustClassifier()
+
 # value_counts pandas function -> count
 print(alpha_df['label'].value_counts())
 # make histogram of value counts per label
@@ -50,7 +51,8 @@ X = scaler.fit_transform(X)
 
 # Convert data to PyTorch tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
-y_tensor = torch.tensor(y, dtype=torch.float32).unsqueeze(1)  # Reshape for PyTorch
+y_tensor = torch.tensor(y.to_numpy(dtype=np.float32)).unsqueeze(1)  # Reshape for PyTorch
+model = TrustClassifier(X_tensor)
 
 # Create a dataset and split it into training and testing sets
 dataset = TensorDataset(X_tensor, y_tensor)
@@ -65,7 +67,7 @@ test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 criterion = nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-num_epochs = 30
+num_epochs = 100
 for epoch in range(num_epochs):
     model.train()
     for X_batch, y_batch in train_loader:
