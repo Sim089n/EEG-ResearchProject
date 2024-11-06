@@ -292,7 +292,8 @@ def main(#num_trustlevels: int = typer.Option(
     X = alpha_df[['Mean', 'Peak', 'Median', 'Std', 'Kurtosis']]  # Features
     y = alpha_df['label']  # Labels
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42) # 70% training and 30% test
-
+    
+    # Augmentation approach to balance the amount of high and low trust instances
     # include SMOTE to balance the dataset
     # Apply SMOTE to create synthetic samples
     smote = SMOTE(sampling_strategy='auto', random_state=42)
@@ -405,7 +406,7 @@ def main(#num_trustlevels: int = typer.Option(
     for i, j in zip(row_ind, col_ind):
         aligned_labels[y_prediction == j] = i
 
-    # Augmentation approach to balance the amount of high and low trust instances
+    
     # check what the participants wrote in their questionnaire is represented in the EEG data as well
     # find the instances where it is not matching -> keep those instances and go back to the features and try to gain information based on the raw and processed data
     # Calculate metrics
@@ -427,6 +428,12 @@ def main(#num_trustlevels: int = typer.Option(
     print(f"Number of Iterations: {kmeans.n_iter_:.4f}")
     print(f"Labels:", kmeans.labels_)
 
+    # create dataframe which holds the wrongly classified instances
+    wrong_classified_instances = pd.DataFrame()
+    for i in range(len(y_smote)):
+        if y_smote[i] != aligned_labels[i]:
+            wrong_classified_instances = wrong_classified_instances.append(alpha_df.iloc[i])
+
     # Plotting the clusters
     plt.scatter(scaled_features[:, 0], scaled_features[:, 1], c=aligned_labels, cmap='viridis', marker='o')
     plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s=200, c='red', label='Centroids')
@@ -440,7 +447,7 @@ def main(#num_trustlevels: int = typer.Option(
 if __name__ == "__main__":
     typer.run(main)
 # __main__ only set when NNone is main script
-# if NNone is imported, __main__ is not set, so typer.run(main) is not executed
+# if script is imported, __main__ is not set, so typer.run(main) is not executed
 # instead the function main() can be called from another script
 # or we check if __name__ equals name of script -> if so, execute typer.run(main)
 # because interpreter sets __name__ to __main__ when script is and to "name of script" when imported
