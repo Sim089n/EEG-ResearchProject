@@ -8,19 +8,35 @@ import pandas as pd
 import glob
 import numpy as np
 
-class TrustClassifier(nn.Module):
-    def __init__(self, X_tensor):
-        super(TrustClassifier, self).__init__()
-        self.fc1 = nn.Linear(X_tensor.shape[1], 64)
-        self.fc2 = nn.Linear(64, 32)
-        self.output = nn.Linear(32, 1)
+class EEGTrustClassifier(nn.Module):
+    def __init__(self):
+        super(EEGTrustClassifier, self).__init__()
+        # 1D Convolutional Layer
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool1d(kernel_size=2)
+        
+        # LSTM Layer
+        self.lstm = nn.LSTM(input_size=16, hidden_size=32, num_layers=2, batch_first=True)
+        
+        # Fully Connected Layers
+        self.fc1 = nn.Linear(32, 16)
+        self.fc2 = nn.Linear(16, 1)
+        
+        # Activation Functions
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
         
     def forward(self, x):
-        x = self.relu(self.fc1(x))
-        x = self.relu(self.fc2(x))
-        x = self.sigmoid(self.output(x))
+        x = x.unsqueeze(1)  # Add channel dimension for Conv1D
+        x = self.pool(self.relu(self.conv1(x)))  # Convolutional layer + pooling
+        x = x.permute(0, 2, 1)  # Reshape for LSTM (batch, sequence, features)
+        
+        # LSTM Layer
+        _, (hn, _) = self.lstm(x)
+        
+        # Fully Connected Layers
+        x = self.relu(self.fc1(hn[-1]))
+        x = self.sigmoid(self.fc2(x))  # Sigmoid for binary classification
         return x
 
 # load csv files
@@ -51,8 +67,8 @@ y = alpha_df['label']  # Labels
 # Apply SMOTE to create synthetic samples
 #smote = SMOTE(sampling_strategy='auto', random_state=42)
 #X_smote, y_smote = smote.fit_resample(X, y)
-#------------------------------End Augmentation Approach-----------------------------------#
-
+#------------------------------End Augmentation Approach-----------------------------------
+model = EEGTrustClassifier()
 # Standardize the feature data
 scaler = StandardScaler()
 X = scaler.fit_transform(X)
@@ -60,7 +76,6 @@ X = scaler.fit_transform(X)
 # Convert data to PyTorch tensors
 X_tensor = torch.tensor(X, dtype=torch.float32)
 y_tensor = torch.tensor(y.to_numpy(dtype=np.float32)).unsqueeze(1)  # Reshape for PyTorch
-model = TrustClassifier(X_tensor)
 
 # Create a dataset and split it into training and testing sets
 dataset = TensorDataset(X_tensor, y_tensor)
@@ -75,6 +90,7 @@ test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 criterion = nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
+#---------------------------------------Training Loop---------------------------------------
 num_epochs = 100
 for epoch in range(num_epochs):
     model.train()
@@ -84,9 +100,10 @@ for epoch in range(num_epochs):
         loss = criterion(predictions, y_batch)
         loss.backward()
         optimizer.step()
-    
     print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}')
+#---------------------------------------Training Loop---------------------------------------
 
+#----------------------------------------Evaluation-----------------------------------------
 model.eval()
 with torch.no_grad():
     correct = 0
@@ -99,3 +116,4 @@ with torch.no_grad():
         
     accuracy = correct / total
 print(f'Test Accuracy: {accuracy:.2f}')
+#----------------------------------------Evaluation-----------------------------------------
