@@ -442,7 +442,7 @@ def main(#num_trustlevels: int = typer.Option(
             # get the row of the timestamp
             for index, row in eeg_data.iterrows():
                 if index <= time_in_raw_data and index >= time_in_raw_data-128:
-                    df_rows_wrong_classified = eeg_data.iloc[index]
+                    df_rows_wrong_classified = df_rows_wrong_classified.append(eeg_data.iloc[index])
 
     # Plotting the clusters
     plt.scatter(scaled_features[:, 0], scaled_features[:, 1], c=aligned_labels, cmap='viridis', marker='o')
