@@ -279,6 +279,8 @@ def main(#num_trustlevels: int = typer.Option(
         alpha_df = pd.read_csv(file, index_col=0)
         # only consider the rows with a label
         alpha_df_with_label = alpha_df.dropna()
+        # add the participant/file ID as the first column to the dataframe
+        alpha_df_with_label.insert(0, 'Participant_ID', int(file[file.find("ID")+3]+file[file.find("ID")+4]))
         df_frames.append(alpha_df_with_label)
 
     # Concatenate the DataFrames to get our dataset --> includes all participants in stages 3 and 4
@@ -433,6 +435,14 @@ def main(#num_trustlevels: int = typer.Option(
     for i in range(len(y_smote)):
         if y_smote[i] != aligned_labels[i]:
             wrong_classified_instances = wrong_classified_instances.append(alpha_df.iloc[i])
+            part_ID = alpha_df.iloc[i]['Participant_ID']
+            time_in_raw_data = alpha_df.iloc[i]['']*128
+            # load the csv file with participant ID in its name
+            eeg_data = pd.read_csv(f'data/{part_ID}.csv')
+            # get the row of the timestamp
+            for index, row in eeg_data.iterrows():
+                if index <= time_in_raw_data and index >= time_in_raw_data-128:
+                    df_rows_wrong_classified = eeg_data.iloc[index]
 
     # Plotting the clusters
     plt.scatter(scaled_features[:, 0], scaled_features[:, 1], c=aligned_labels, cmap='viridis', marker='o')
@@ -441,7 +451,7 @@ def main(#num_trustlevels: int = typer.Option(
     plt.show()
     # Ensure the directory exists
     os.makedirs(os.path.dirname('plots/'), exist_ok=True)
-    plt.savefig('plots/kmeans_clusters.png')
+    plt.savefig('kmeans_clusters.png')
 
 
 if __name__ == "__main__":
