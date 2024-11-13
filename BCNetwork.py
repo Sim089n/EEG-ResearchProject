@@ -16,7 +16,7 @@ class TrustClassifier(nn.Module):
         self.fc2 = nn.Linear(64, 32)
         self.output = nn.Linear(32, 1)
         self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
+        self.sigmoid = nn.Sigmoid()#nn.Softmax(dim=1)
         
     def forward(self, x):
         x = self.relu(self.fc1(x))
@@ -87,9 +87,9 @@ for epoch in range(num_epochs):
         loss = criterion(predictions, y_batch)
         loss.backward()
         optimizer.step()
-        accuracy_scores_train.append(accuracy_score(y_batch, predictions))
-        precision_scores_train.append(precision_score(y_batch, predictions, average='binary'))
-        recall_scores_train.append(recall_score(y_batch, predictions, average='binary'))
+        accuracy_scores_train.append(accuracy_score(y_batch, predictions.detach().numpy()))
+        precision_scores_train.append(precision_score(y_batch, predictions.detach().numpy(), average='binary'))
+        recall_scores_train.append(recall_score(y_batch, predictions.detach().numpy(), average='binary'))
     print("---------------------------------------------------------------------")
     print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}')
     print(f"Average Training Accuracy: {np.mean(accuracy_scores_train)}")
@@ -112,7 +112,8 @@ with torch.no_grad():
         precision_scores_test.append(precision_score(y_batch, predictions, average='binary'))
         recall_scores_test.append(recall_score(y_batch, predictions, average='binary'))
     accuracy = correct / total
+print("---------------------------------------------------------------------")
 print(f'Test Accuracy: {accuracy:.2f}')
-print(f"Average Training Accuracy: {np.mean(accuracy_scores_test)}")
-print(f"Average Training Precision: {np.mean(precision_scores_test)}")
-print(f"Average Training Recall: {np.mean(recall_scores_test)}")
+print(f"Average Test Accuracy: {np.mean(accuracy_scores_test)}")
+print(f"Average Test Precision: {np.mean(precision_scores_test)}")
+print(f"Average Test Recall: {np.mean(recall_scores_test)}")

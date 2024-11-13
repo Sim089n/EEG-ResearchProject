@@ -289,18 +289,20 @@ def main(#num_trustlevels: int = typer.Option(
     print(alpha_df['label'].value_counts())
     # make histogram of value counts per label
     alpha_df['label'].value_counts().plot(kind='bar')
+    os.makedirs(os.path.dirname('plots/'), exist_ok=True)
+    plt.savefig('plots/value_counts_trust_classes.png')
     plt.show()
     # Split dataset into training set and test set
     X = alpha_df[['Mean', 'Peak', 'Median', 'Std', 'Kurtosis']]  # Features
     y = alpha_df['label']  # Labels
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42) # 70% training and 30% test
+    
     
     # Augmentation approach to balance the amount of high and low trust instances
     # include SMOTE to balance the dataset
     # Apply SMOTE to create synthetic samples
     smote = SMOTE(sampling_strategy='auto', random_state=42)
     X_smote, y_smote = smote.fit_resample(X, y)
-
+    X_smote_train, X_smote_test, y_smote_train, y_smote_test = train_test_split(X_smote, y_smote, test_size=0.3, random_state=42) # 70% training and 30% test
 
 
     #Create a svm Classifier
@@ -314,9 +316,9 @@ def main(#num_trustlevels: int = typer.Option(
     recall_scores = []
 
     # Loop through each fold
-    for train_index, test_index in skf.split(X_smote, y_smote):
-        X_train_fold, X_test_fold = X_smote.iloc[train_index], X_smote.iloc[test_index]
-        y_train_fold, y_test_fold = y_smote.iloc[train_index], y_smote.iloc[test_index]
+    for train_index, test_index in skf.split(X_smote_train, y_smote_train):
+        X_train_fold, X_test_fold = X_smote_train.iloc[train_index], X_smote_train.iloc[test_index]
+        y_train_fold, y_test_fold = y_smote_train.iloc[train_index], y_smote_train.iloc[test_index]
         
         # Train on fold
         svm_clf.fit(X_train_fold, y_train_fold)
@@ -343,20 +345,20 @@ def main(#num_trustlevels: int = typer.Option(
     #svm_clf.fit(X_train, y_train)
 
     #Predict the response for test dataset
-    y_pred = svm_clf.predict(X_test)
+    y_pred = svm_clf.predict(X_smote_test)
 
     print("---------------------------------------------------------------------")
     print("SVM Classification Results:")
     # Model Accuracy: how often is the classifier correct
-    print("Accuracy SVM:",metrics.balanced_accuracy_score(y_test, y_pred)) 
+    print("Accuracy SVM:",metrics.balanced_accuracy_score(y_smote_test, y_pred)) 
     # Model Precision: what percentage of positive tuples are labeled as such
-    print("Precision SVM:",metrics.precision_score(y_test, y_pred, average='weighted'))
+    print("Precision SVM:",metrics.precision_score(y_smote_test, y_pred, average='weighted'))
     # Model Recall: what percentage of positive tuples are labelled as such
-    print("Recall SVM:",metrics.recall_score(y_test, y_pred, average='weighted'))
+    print("Recall SVM:",metrics.recall_score(y_smote_test, y_pred, average='weighted'))
     # Model F1 Score: weighted average of the precision and recall
-    print("F1 Score SVM:",metrics.f1_score(y_test, y_pred, average='weighted'))
+    print("F1 Score SVM:",metrics.f1_score(y_smote_test, y_pred, average='weighted'))
     # Confusion Matrix
-    print("Confusion Matrix SVM:\n",metrics.confusion_matrix(y_test, y_pred))
+    print("Confusion Matrix SVM:\n",metrics.confusion_matrix(y_smote_test, y_pred))
 
     #--------------------------------------------- k-means clustering ---------------------------------------------#
 
@@ -389,11 +391,11 @@ def main(#num_trustlevels: int = typer.Option(
     plt.xticks(range(1, 11))
     plt.xlabel("Number of Clusters")
     plt.ylabel("SSE")
-    plt.show()
     # svae plot
     # Ensure the directory exists
     os.makedirs(os.path.dirname('plots/'), exist_ok=True)
     plt.savefig('plots/elbow_plot.png')
+    plt.show()
 
     # Fit kmeans with 2 clusters for this example
     kmeans = KMeans(init="random", n_clusters=2, n_init=10, max_iter=300, random_state=42)
@@ -433,27 +435,31 @@ def main(#num_trustlevels: int = typer.Option(
     # create dataframe which holds the wrongly classified instances
 
     wrong_classified_instances = pd.DataFrame(columns=alpha_df.columns)
-    for i in range(len(y_smote)):
-        if y_smote[i] != aligned_labels[i]:
-            wrong_classified_instances.loc[len(wrong_classified_instances)] = alpha_df.iloc[i]
-            part_ID = alpha_df.iloc[i]['Participant_ID']
-            time_in_raw_data = alpha_df.iloc[i]['']*128
+    y_smote_original = y_smote[:len(y)]
+    for i in range(len(y_smote_original)):
+        if y_smote_original[i] != aligned_labels[i]:
+            wrong_classified_instances.loc[len(wrong_classified_instances)] = alpha_df.iloc[i] # oob error because of oversampling
+            #-------------------get the raw data of the wrongly classified instances-------------------#
+            #part_ID = alpha_df.iloc[i]['Participant_ID']
+            #time_in_raw_data = alpha_df.iloc[i]['']*128
             # load the csv file with participant ID in its name
-            eeg_data = pd.read_csv(f'data/{part_ID}.csv')
+            #eeg_data = pd.read_csv(f'data/{part_ID}.csv')
             # get the row of the timestamp
-            df_rows_wrong_classified = pd.DataFrame(columns=eeg_data.columns)
-            for index, row in eeg_data.iterrows():
-                if index <= time_in_raw_data and index >= time_in_raw_data-128:
-                    df_rows_wrong_classified.loc[len(df_rows_wrong_classified)] = eeg_data.iloc[index]
-
+            #df_rows_wrong_classified = pd.DataFrame(columns=eeg_data.columns)
+            #for index, row in eeg_data.iterrows():
+                #if index <= time_in_raw_data and index >= time_in_raw_data-128:
+                    #df_rows_wrong_classified.loc[len(df_rows_wrong_classified)] = eeg_data.iloc[index]
+    print(f"Number of wrongly classified instances: {len(wrong_classified_instances)} from {len(y_smote_original)} instances in the orginal dataset were labeled wrong.")
+    print(f"That means that {len(wrong_classified_instances)/len(y_smote_original)*100}% of the instances were labeled wrong.")
+    print(f"{len(y_smote)-len(y_smote_original)} instances were added by the SMOTE algorithm from which {conf_mat[0,0]+conf_mat[1,1]-(len(y_smote_original)-len(wrong_classified_instances))} were labeled right and {conf_mat[0,1]+conf_mat[1,0]-len(wrong_classified_instances)} were labeled wrong.")
     # Plotting the clusters
     plt.scatter(scaled_features[:, 0], scaled_features[:, 1], c=aligned_labels, cmap='viridis', marker='o')
     plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s=200, c='red', label='Centroids')
     plt.legend()
-    plt.show()
     # Ensure the directory exists
     os.makedirs(os.path.dirname('plots/'), exist_ok=True)
-    plt.savefig('kmeans_clusters.png')
+    plt.savefig('plots/kmeans_clusters.png') 
+    plt.show()
 
 
 if __name__ == "__main__":
