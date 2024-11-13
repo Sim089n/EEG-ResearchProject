@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import glob
 import numpy as np
+from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix
 
 class TrustClassifier(nn.Module):
     def __init__(self, X_tensor):
@@ -74,7 +75,9 @@ test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 
 criterion = nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
-
+accuracy_scores_train = []
+precision_scores_train = []
+recall_scores_train = []
 num_epochs = 100
 for epoch in range(num_epochs):
     model.train()
@@ -84,9 +87,18 @@ for epoch in range(num_epochs):
         loss = criterion(predictions, y_batch)
         loss.backward()
         optimizer.step()
-    
+        accuracy_scores_train.append(accuracy_score(y_batch, predictions))
+        precision_scores_train.append(precision_score(y_batch, predictions, average='binary'))
+        recall_scores_train.append(recall_score(y_batch, predictions, average='binary'))
+    print("---------------------------------------------------------------------")
     print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}')
+    print(f"Average Training Accuracy: {np.mean(accuracy_scores_train)}")
+    print(f"Average Training Precision: {np.mean(precision_scores_train)}")
+    print(f"Average Training Recall: {np.mean(recall_scores_train)}")
 
+accuracy_scores_test = []
+precision_scores_test = []
+recall_scores_test = []
 model.eval()
 with torch.no_grad():
     correct = 0
@@ -96,6 +108,11 @@ with torch.no_grad():
         predicted = (predictions > 0.5).float()  # Convert to binary predictions
         correct += (predicted == y_batch).sum().item()
         total += y_batch.size(0)
-        
+        accuracy_scores_test.append(accuracy_score(y_batch, predictions))
+        precision_scores_test.append(precision_score(y_batch, predictions, average='binary'))
+        recall_scores_test.append(recall_score(y_batch, predictions, average='binary'))
     accuracy = correct / total
 print(f'Test Accuracy: {accuracy:.2f}')
+print(f"Average Training Accuracy: {np.mean(accuracy_scores_test)}")
+print(f"Average Training Precision: {np.mean(precision_scores_test)}")
+print(f"Average Training Recall: {np.mean(recall_scores_test)}")
