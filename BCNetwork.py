@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -7,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import glob
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score, confusion_matrix
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, balanced_accuracy_score
 
 class TrustClassifier(nn.Module):
     def __init__(self, X_tensor):
@@ -78,7 +79,14 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 accuracy_scores_train = []
 precision_scores_train = []
 recall_scores_train = []
-num_epochs = 100
+f1_train =[]
+#roc_auc_train = []
+mean_epoch_accuracy_train = []
+mean_epoch_precision_train = []
+mean_epoch_recall_train = []
+mean_epoch_f1_train = []
+epoch_loss_train = []
+num_epochs = 10
 for epoch in range(num_epochs):
     model.train()
     for X_batch, y_batch in train_loader:
@@ -87,33 +95,88 @@ for epoch in range(num_epochs):
         loss = criterion(predictions, y_batch)
         loss.backward()
         optimizer.step()
-        accuracy_scores_train.append(accuracy_score(y_batch, predictions.detach().numpy()))
-        precision_scores_train.append(precision_score(y_batch, predictions.detach().numpy(), average='binary'))
-        recall_scores_train.append(recall_score(y_batch, predictions.detach().numpy(), average='binary'))
+        predictions_binary_train = (predictions >= 0.5).float()
+        accuracy_scores_train.append(balanced_accuracy_score(y_batch, predictions_binary_train))
+        precision_scores_train.append(precision_score(y_batch, predictions_binary_train, average='binary'))
+        recall_scores_train.append(recall_score(y_batch, predictions_binary_train, average='binary'))
+        f1_train.append(f1_score(y_batch, predictions_binary_train))
+        #roc_auc_train.append(roc_auc_score(y_batch, predictions.detach().numpy(), zer)) #Compute Area Under the Receiver Operating Characteristic Curve (ROC AUC) from prediction scores
+    epoch_loss_train.append(loss.item())
+    mean_epoch_accuracy_train.append(np.mean(accuracy_scores_train))
+    mean_epoch_precision_train.append(np.mean(precision_scores_train))
+    mean_epoch_recall_train.append(np.mean(recall_scores_train))
+    mean_epoch_f1_train.append(np.mean(f1_train))
     print("---------------------------------------------------------------------")
     print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}')
-    print(f"Average Training Accuracy: {np.mean(accuracy_scores_train)}")
-    print(f"Average Training Precision: {np.mean(precision_scores_train)}")
-    print(f"Average Training Recall: {np.mean(recall_scores_train)}")
+    print(f"Average Training Accuracy: {mean_epoch_accuracy_train[-1]}")
+    print(f"Average Training Precision: {mean_epoch_precision_train[-1]}")
+    print(f"Average Training Recall: {mean_epoch_recall_train[-1]}")
+    print(f"Average Training F1 Score: {mean_epoch_f1_train[-1]}")
+    #print(f"Average Training ROC AUC: {np.mean(roc_auc_train)}")
+
+epochs = np.arange(1, num_epochs+1)
+# plot all the metrics over the cause of the training
+plt.figure(figsize=(12, 8))
+plt.plot(epochs, epoch_loss_train,label='Loss')
+plt.plot(epochs, mean_epoch_accuracy_train,label='Accuracy Train')
+plt.plot(epochs, mean_epoch_precision_train, label='Precision Train')
+plt.plot(epochs, mean_epoch_recall_train, label='Recall Train')
+plt.plot(epochs, mean_epoch_f1_train, label='F1 Score Train')
+#plt.plot(roc_auc_train, label='ROC AUC Score Train')
+plt.xlabel('Epochs')
+plt.ylabel('Metric Value')
+plt.title('Training Metrics')
+plt.legend()
+# Ensure the directory exists
+os.makedirs(os.path.dirname('plots/'), exist_ok=True)
+plt.savefig('plots/BCN_training_metrics.png') 
+plt.show()
 
 accuracy_scores_test = []
 precision_scores_test = []
 recall_scores_test = []
+f1_test = []
+#roc_auc_test = []
+mean_epoch_accuracy_test = []
+mean_epoch_precision_test = []
+mean_epoch_recall_test = []
+mean_epoch_f1_test = []
 model.eval()
 with torch.no_grad():
     correct = 0
     total = 0
     for X_batch, y_batch in test_loader:
         predictions = model(X_batch)
-        predicted = (predictions > 0.5).float()  # Convert to binary predictions
-        correct += (predicted == y_batch).sum().item()
+        predictions_binary_test = (predictions > 0.5).float()  # Convert to binary predictions
+        correct += (predictions_binary_test == y_batch).sum().item()
         total += y_batch.size(0)
-        accuracy_scores_test.append(accuracy_score(y_batch, predictions))
-        precision_scores_test.append(precision_score(y_batch, predictions, average='binary'))
-        recall_scores_test.append(recall_score(y_batch, predictions, average='binary'))
+        accuracy_scores_test.append(balanced_accuracy_score(y_batch, predictions_binary_test))
+        precision_scores_test.append(precision_score(y_batch, predictions_binary_test, average='binary'))
+        recall_scores_test.append(recall_score(y_batch, predictions_binary_test, average='binary'))
+        f1_test.append(f1_score(y_batch, predictions_binary_test))
+        mean_epoch_precision_test.append(np.mean(precision_scores_test))
+        mean_epoch_recall_test.append(np.mean(recall_scores_train))
+        mean_epoch_f1_test.append(np.mean(f1_train))
+        print("---------------------------------------------------------------------")
+        print(f"Average Test Precision: {np.mean(precision_scores_test)}")
+        print(f"Average Test Recall: {np.mean(recall_scores_test)}")
+        print(f"Average Test F1 Score: {np.mean(f1_test)}")
     accuracy = correct / total
-print("---------------------------------------------------------------------")
-print(f'Test Accuracy: {accuracy:.2f}')
-print(f"Average Test Accuracy: {np.mean(accuracy_scores_test)}")
-print(f"Average Test Precision: {np.mean(precision_scores_test)}")
-print(f"Average Test Recall: {np.mean(recall_scores_test)}")
+    print(f'Test Accuracy: {accuracy:.2f}')
+
+#print(f"Average Test ROC AUC: {np.mean(roc_auc_test)}")
+iterations = np.arange(1, len(mean_epoch_f1_test) + 1)
+# plot all the metrics over the cause of the testing phase
+plt.figure(figsize=(12, 8))
+plt.plot(iterations, mean_epoch_precision_test, label='Precision Test')
+plt.plot(iterations, mean_epoch_recall_test, label='Recall Test')
+plt.plot(iterations, mean_epoch_f1_test, label='F1 Score Test')
+#plt.plot(roc_auc_test, label='ROC AUC Score Test')
+plt.xlabel('Iterations')
+plt.ylabel('Metric Value')
+plt.title('Testing Metrics')
+plt.legend()
+# Ensure the directory exists
+os.makedirs(os.path.dirname('plots/'), exist_ok=True)
+plt.savefig('plots/BCN_testing_metrics.png') 
+plt.show()
