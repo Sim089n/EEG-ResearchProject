@@ -21,7 +21,7 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, cross_val_
 from sklearn.datasets import make_blobs
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, accuracy_score, precision_score, recall_score, make_scorer
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from imblearn.over_sampling import SMOTE
 
 #------------- Define functions to preprocess EEG data --------------# 
@@ -301,6 +301,11 @@ def main(#num_trustlevels: int = typer.Option(
     # include SMOTE to balance the dataset
     # Apply SMOTE to create synthetic samples
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y) # 70% training and 30% test
+    # add minmax scaler
+    minmax_scaler = MinMaxScaler()
+    X_train = minmax_scaler.fit_transform(X_train)
+    X_test = minmax_scaler.transform(X_test)
+
     smote = SMOTE(sampling_strategy='auto', random_state=42)
     X_smote_train, y_smote_train = smote.fit_resample(X_train, y_train)
     
@@ -366,9 +371,9 @@ def main(#num_trustlevels: int = typer.Option(
     # create a k-means clustering algorithm which is trained on the features alpha files
     # the labels are the trust_score_binary from the details.csv file
     # the model should be saved as a pickle file and can be used in the main file
-    scaler = StandardScaler()
-    scaled_features = scaler.fit_transform(X_smote_train)
-    X_test_scaled = scaler.transform(X_test)
+    scaler_kmeans = StandardScaler()
+    X_train_scaled_features = scaler_kmeans.fit_transform(X_smote_train)
+    X_test_scaled = scaler_kmeans.transform(X_test)
     kmeans_kwargs = {
         "init": "random",
         "n_init": 10,
@@ -384,7 +389,7 @@ def main(#num_trustlevels: int = typer.Option(
     sse = []
     for k in range(1, 11):
         kmeans = KMeans(n_clusters=k, **kmeans_kwargs)
-        kmeans.fit(scaled_features)
+        kmeans.fit(X_train_scaled_features)
         sse.append(kmeans.inertia_)
 
     # print the ellbow plot
@@ -401,29 +406,31 @@ def main(#num_trustlevels: int = typer.Option(
 
     # Fit kmeans with 2 clusters for this example
     kmeans = KMeans(init="random", n_clusters=2, n_init=10, max_iter=300, random_state=42)
-    y_prediction = kmeans.fit_predict(scaled_features)
+    kmeans.fit(X_train_scaled_features)
 
+    y_prediction_train = kmeans.predict(X_train_scaled_features)
+    y_prediction_test = kmeans.predict(X_test_scaled)
     # Generate the contingency matrix
-    contingency_matrix = metrics.cluster.contingency_matrix(y_, y_prediction)
+    contingency_matrix = metrics.cluster.contingency_matrix(y_test, y_prediction_test)
 
     # Find the best label alignment using the Hungarian algorithm
     row_ind, col_ind = linear_sum_assignment(-contingency_matrix)
-    aligned_labels = np.zeros_like(y_prediction)
+    aligned_labels = np.zeros_like(y_prediction_test)
     for i, j in zip(row_ind, col_ind):
-        aligned_labels[y_prediction == j] = i
+        aligned_labels[y_prediction_test == j] = i
 
     
     # check what the participants wrote in their questionnaire is represented in the EEG data as well
     # find the instances where it is not matching -> keep those instances and go back to the features and try to gain information based on the raw and processed data
     # Calculate metrics
-    accuracy = metrics.balanced_accuracy_score(y_smote, aligned_labels)
-    precision = metrics.precision_score(y_smote, aligned_labels, average='weighted')
-    recall = metrics.recall_score(y_smote, aligned_labels, average='weighted')
-    f1 = metrics.f1_score(y_smote, aligned_labels, average='weighted')
-    conf_mat = metrics.confusion_matrix(y_smote, aligned_labels)
+    accuracy = metrics.balanced_accuracy_score(y_test, aligned_labels)
+    precision = metrics.precision_score(y_test, aligned_labels, average='weighted')
+    recall = metrics.recall_score(y_test, aligned_labels, average='weighted')
+    f1 = metrics.f1_score(y_test, aligned_labels, average='weighted')
+    conf_mat = metrics.confusion_matrix(y_test, aligned_labels)
     print("---------------------------------------------------------------------")
     print("KMeans Clustering Results:")
-    print("Silhouette Score:", silhouette_score(scaled_features, aligned_labels))
+    print("Silhouette Score:", silhouette_score(X_train_scaled_features, aligned_labels))
     print(f"Accuracy k-means: {accuracy:.4f}")
     print(f"Precision k-means: {precision:.4f}")
     print(f"Recall k-means: {recall:.4f}")
@@ -437,7 +444,7 @@ def main(#num_trustlevels: int = typer.Option(
     # create dataframe which holds the wrongly classified instances
 
     wrong_classified_instances = pd.DataFrame(columns=alpha_df.columns)
-    y_smote_original = y_smote[:len(y)]
+    y_smote_original = y_test[:len(y)]
     for i in range(len(y_smote_original)):
         if y_smote_original[i] != aligned_labels[i]:
             wrong_classified_instances.loc[len(wrong_classified_instances)] = alpha_df.iloc[i] # oob error because of oversampling
@@ -453,9 +460,9 @@ def main(#num_trustlevels: int = typer.Option(
                     #df_rows_wrong_classified.loc[len(df_rows_wrong_classified)] = eeg_data.iloc[index]
     print(f"Number of wrongly classified instances: {len(wrong_classified_instances)} from {len(y_smote_original)} instances in the orginal dataset were labeled wrong.")
     print(f"That means that {len(wrong_classified_instances)/len(y_smote_original)*100}% of the instances were labeled wrong.")
-    print(f"{len(y_smote)-len(y_smote_original)} instances were added by the SMOTE algorithm from which {conf_mat[0,0]+conf_mat[1,1]-(len(y_smote_original)-len(wrong_classified_instances))} were labeled right and {conf_mat[0,1]+conf_mat[1,0]-len(wrong_classified_instances)} were labeled wrong.")
+    print(f"{len(y_test)-len(y_smote_original)} instances were added by the SMOTE algorithm from which {conf_mat[0,0]+conf_mat[1,1]-(len(y_smote_original)-len(wrong_classified_instances))} were labeled right and {conf_mat[0,1]+conf_mat[1,0]-len(wrong_classified_instances)} were labeled wrong.")
     # Plotting the clusters
-    plt.scatter(scaled_features[:, 0], scaled_features[:, 1], c=aligned_labels, cmap='viridis', marker='o')
+    plt.scatter(X_train_scaled_features[:, 0], X_train_scaled_features[:, 1], c=aligned_labels, cmap='viridis', marker='o')
     plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s=200, c='red', label='Centroids')
     plt.legend()
     # Ensure the directory exists
