@@ -300,9 +300,10 @@ def main(#num_trustlevels: int = typer.Option(
     # Augmentation approach to balance the amount of high and low trust instances
     # include SMOTE to balance the dataset
     # Apply SMOTE to create synthetic samples
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y) # 70% training and 30% test
     smote = SMOTE(sampling_strategy='auto', random_state=42)
-    X_smote, y_smote = smote.fit_resample(X, y)
-    X_smote_train, X_smote_test, y_smote_train, y_smote_test = train_test_split(X_smote, y_smote, test_size=0.3, random_state=42) # 70% training and 30% test
+    X_smote_train, y_smote_train = smote.fit_resample(X_train, y_train)
+    
 
 
     #Create a svm Classifier
@@ -345,20 +346,20 @@ def main(#num_trustlevels: int = typer.Option(
     #svm_clf.fit(X_train, y_train)
 
     #Predict the response for test dataset
-    y_pred = svm_clf.predict(X_smote_test)
+    y_pred = svm_clf.predict(X_test)
 
     print("---------------------------------------------------------------------")
     print("SVM Classification Results:")
     # Model Accuracy: how often is the classifier correct
-    print("Accuracy SVM:",metrics.balanced_accuracy_score(y_smote_test, y_pred)) 
+    print("Accuracy SVM:",metrics.balanced_accuracy_score(y_test, y_pred)) 
     # Model Precision: what percentage of positive tuples are labeled as such
-    print("Precision SVM:",metrics.precision_score(y_smote_test, y_pred, average='weighted'))
+    print("Precision SVM:",metrics.precision_score(y_test, y_pred, average='weighted'))
     # Model Recall: what percentage of positive tuples are labelled as such
-    print("Recall SVM:",metrics.recall_score(y_smote_test, y_pred, average='weighted'))
+    print("Recall SVM:",metrics.recall_score(y_test, y_pred, average='weighted'))
     # Model F1 Score: weighted average of the precision and recall
-    print("F1 Score SVM:",metrics.f1_score(y_smote_test, y_pred, average='weighted'))
+    print("F1 Score SVM:",metrics.f1_score(y_test, y_pred, average='weighted'))
     # Confusion Matrix
-    print("Confusion Matrix SVM:\n",metrics.confusion_matrix(y_smote_test, y_pred))
+    print("Confusion Matrix SVM:\n",metrics.confusion_matrix(y_test, y_pred))
 
     #--------------------------------------------- k-means clustering ---------------------------------------------#
 
@@ -366,7 +367,8 @@ def main(#num_trustlevels: int = typer.Option(
     # the labels are the trust_score_binary from the details.csv file
     # the model should be saved as a pickle file and can be used in the main file
     scaler = StandardScaler()
-    scaled_features = scaler.fit_transform(X_smote)
+    scaled_features = scaler.fit_transform(X_smote_train)
+    X_test_scaled = scaler.transform(X_test)
     kmeans_kwargs = {
         "init": "random",
         "n_init": 10,
@@ -402,7 +404,7 @@ def main(#num_trustlevels: int = typer.Option(
     y_prediction = kmeans.fit_predict(scaled_features)
 
     # Generate the contingency matrix
-    contingency_matrix = metrics.cluster.contingency_matrix(y_smote, y_prediction)
+    contingency_matrix = metrics.cluster.contingency_matrix(y_, y_prediction)
 
     # Find the best label alignment using the Hungarian algorithm
     row_ind, col_ind = linear_sum_assignment(-contingency_matrix)
