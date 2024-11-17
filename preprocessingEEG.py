@@ -293,7 +293,7 @@ def main(#num_trustlevels: int = typer.Option(
     plt.savefig('plots/value_counts_trust_classes.png')
     plt.show()
     # Split dataset into training set and test set
-    X = alpha_df[['Mean', 'Peak', 'Median', 'Std', 'Kurtosis']]  # Features
+    X = alpha_df[['Mean', 'Peak', 'Std', 'Kurtosis']]  # Features
     y = alpha_df['label']  # Labels
     
     
