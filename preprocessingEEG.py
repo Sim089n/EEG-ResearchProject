@@ -295,8 +295,14 @@ def main(#num_trustlevels: int = typer.Option(
     # Split dataset into training set and test set
     X = alpha_df[['Mean', 'Peak', 'Std', 'Kurtosis']]  # Features
     y = alpha_df['label']  # Labels
+    df_low_high_trust_counts_per_participant=alpha_df.groupby(['Participant_ID']).agg('label').value_counts()
+    print(df_low_high_trust_counts_per_participant)
+    if not os.path.exists(f'low_high_trust_counts_per_participant.csv'):
+                output_file_low_high_trust_counts = (f'low_high_trust_counts_per_participant.csv')
+                df_low_high_trust_counts_per_participant.to_csv(output_file_low_high_trust_counts)
     
-    
+    # plot the value counts of the trust classes per participant
+    alpha_df.groupby('Participant_ID')['label'].value_counts().unstack().plot(kind='bar', stacked=True)
     # Augmentation approach to balance the amount of high and low trust instances
     # include SMOTE to balance the dataset
     # Apply SMOTE to create synthetic samples
@@ -309,8 +315,6 @@ def main(#num_trustlevels: int = typer.Option(
     smote = SMOTE(sampling_strategy='auto', random_state=42)
     X_smote_train, y_smote_train = smote.fit_resample(X_train, y_train)
     
-
-
     #Create a svm Classifier
     svm_clf = svm.SVC(C=0.5, class_weight="balanced") # Linear Kernel
     # Define Stratified K-Folds
@@ -469,6 +473,15 @@ def main(#num_trustlevels: int = typer.Option(
     os.makedirs(os.path.dirname('plots/'), exist_ok=True)
     plt.savefig('plots/kmeans_clusters.png') 
     plt.show()
+
+    #-----------------do the k-means with 4 clusters-----------------#
+    kmeans = KMeans(init="random", n_clusters=2, n_init=10, max_iter=300, random_state=42)
+    kmeans.fit(X_train_scaled_features)
+
+    y_prediction_train = kmeans.predict(X_train_scaled_features)
+    y_prediction_test = kmeans.predict(X_test_scaled)
+    # cross tabulation
+    #pd.crosstab(, y_prediction_test)
 
 
 if __name__ == "__main__":
