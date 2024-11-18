@@ -291,7 +291,7 @@ def main(#num_trustlevels: int = typer.Option(
     alpha_df['label'].value_counts().plot(kind='bar')
     os.makedirs(os.path.dirname('plots/'), exist_ok=True)
     plt.savefig('plots/value_counts_trust_classes.png')
-    plt.show()
+    plt.show(block=False)
     # Split dataset into training set and test set
     X = alpha_df[['Mean', 'Peak', 'Std', 'Kurtosis']]  # Features
     y = alpha_df['label']  # Labels
@@ -309,12 +309,15 @@ def main(#num_trustlevels: int = typer.Option(
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y) # 70% training and 30% test
     # add minmax scaler
     minmax_scaler = MinMaxScaler()
-    X_train = minmax_scaler.fit_transform(X_train)
-    X_test = minmax_scaler.transform(X_test)
+    X_train_scaled = minmax_scaler.fit_transform(X_train)
+    X_train_df = pd.DataFrame(X_train_scaled, columns=X.columns, index=X_train.index)
+
+    X_test_scaled = minmax_scaler.transform(X_test)
+    X_test_df = pd.DataFrame(X_test_scaled, columns=X.columns, index=X_test.index)
 
     smote = SMOTE(sampling_strategy='auto', random_state=42)
-    X_smote_train, y_smote_train = smote.fit_resample(X_train, y_train)
-    
+    X_smote_train, y_smote_train = smote.fit_resample(X_train_df, y_train)
+   
     #Create a svm Classifier
     svm_clf = svm.SVC(C=0.5, class_weight="balanced") # Linear Kernel
     # Define Stratified K-Folds
@@ -355,7 +358,7 @@ def main(#num_trustlevels: int = typer.Option(
     #svm_clf.fit(X_train, y_train)
 
     #Predict the response for test dataset
-    y_pred = svm_clf.predict(X_test)
+    y_pred = svm_clf.predict(X_test_df)
 
     print("---------------------------------------------------------------------")
     print("SVM Classification Results:")
@@ -406,7 +409,7 @@ def main(#num_trustlevels: int = typer.Option(
     # Ensure the directory exists
     os.makedirs(os.path.dirname('plots/'), exist_ok=True)
     plt.savefig('plots/elbow_plot.png')
-    plt.show()
+    plt.show(block=False)
 
     # Fit kmeans with 2 clusters for this example
     kmeans = KMeans(init="random", n_clusters=2, n_init=10, max_iter=300, random_state=42)
@@ -414,6 +417,7 @@ def main(#num_trustlevels: int = typer.Option(
 
     y_prediction_train = kmeans.predict(X_train_scaled_features)
     y_prediction_test = kmeans.predict(X_test_scaled)
+    print(f"Crosstab 2 clusters: {pd.crosstab(y_test, y_prediction_test)}")
     # Generate the contingency matrix
     contingency_matrix = metrics.cluster.contingency_matrix(y_test, y_prediction_test)
 
@@ -434,7 +438,7 @@ def main(#num_trustlevels: int = typer.Option(
     conf_mat = metrics.confusion_matrix(y_test, aligned_labels)
     print("---------------------------------------------------------------------")
     print("KMeans Clustering Results:")
-    print("Silhouette Score:", silhouette_score(X_train_scaled_features, aligned_labels))
+    print("Silhouette Score:", silhouette_score(X_test_scaled, aligned_labels))
     print(f"Accuracy k-means: {accuracy:.4f}")
     print(f"Precision k-means: {precision:.4f}")
     print(f"Recall k-means: {recall:.4f}")
@@ -445,43 +449,36 @@ def main(#num_trustlevels: int = typer.Option(
     print(f"Number of Iterations: {kmeans.n_iter_:.4f}")
     print(f"Labels:", kmeans.labels_)
 
+    '''
     # create dataframe which holds the wrongly classified instances
-
     wrong_classified_instances = pd.DataFrame(columns=alpha_df.columns)
-    y_smote_original = y_test[:len(y)]
+    y_smote_original = y_test[0:len(y)]
     for i in range(len(y_smote_original)):
         if y_smote_original[i] != aligned_labels[i]:
             wrong_classified_instances.loc[len(wrong_classified_instances)] = alpha_df.iloc[i] # oob error because of oversampling
-            #-------------------get the raw data of the wrongly classified instances-------------------#
-            #part_ID = alpha_df.iloc[i]['Participant_ID']
-            #time_in_raw_data = alpha_df.iloc[i]['']*128
-            # load the csv file with participant ID in its name
-            #eeg_data = pd.read_csv(f'data/{part_ID}.csv')
-            # get the row of the timestamp
-            #df_rows_wrong_classified = pd.DataFrame(columns=eeg_data.columns)
-            #for index, row in eeg_data.iterrows():
-                #if index <= time_in_raw_data and index >= time_in_raw_data-128:
-                    #df_rows_wrong_classified.loc[len(df_rows_wrong_classified)] = eeg_data.iloc[index]
+            
     print(f"Number of wrongly classified instances: {len(wrong_classified_instances)} from {len(y_smote_original)} instances in the orginal dataset were labeled wrong.")
     print(f"That means that {len(wrong_classified_instances)/len(y_smote_original)*100}% of the instances were labeled wrong.")
     print(f"{len(y_test)-len(y_smote_original)} instances were added by the SMOTE algorithm from which {conf_mat[0,0]+conf_mat[1,1]-(len(y_smote_original)-len(wrong_classified_instances))} were labeled right and {conf_mat[0,1]+conf_mat[1,0]-len(wrong_classified_instances)} were labeled wrong.")
+    '''
     # Plotting the clusters
-    plt.scatter(X_train_scaled_features[:, 0], X_train_scaled_features[:, 1], c=aligned_labels, cmap='viridis', marker='o')
+    plt.scatter(X_test_scaled[:, 0], X_test_scaled[:, 1], c=aligned_labels, cmap='viridis', marker='o')
     plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s=200, c='red', label='Centroids')
     plt.legend()
     # Ensure the directory exists
     os.makedirs(os.path.dirname('plots/'), exist_ok=True)
     plt.savefig('plots/kmeans_clusters.png') 
-    plt.show()
+    plt.show(block=False)
 
     #-----------------do the k-means with 4 clusters-----------------#
-    kmeans = KMeans(init="random", n_clusters=2, n_init=10, max_iter=300, random_state=42)
+    kmeans = KMeans(init="random", n_clusters=4, n_init=10, max_iter=300, random_state=42)
     kmeans.fit(X_train_scaled_features)
 
     y_prediction_train = kmeans.predict(X_train_scaled_features)
     y_prediction_test = kmeans.predict(X_test_scaled)
     # cross tabulation
-    #pd.crosstab(, y_prediction_test)
+    print(f"Crosstab 4 clusters: {pd.crosstab(y_test, y_prediction_test)}")
+    
 
 
 if __name__ == "__main__":
