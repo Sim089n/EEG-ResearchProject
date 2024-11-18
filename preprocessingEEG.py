@@ -449,18 +449,18 @@ def main(#num_trustlevels: int = typer.Option(
     print(f"Number of Iterations: {kmeans.n_iter_:.4f}")
     print(f"Labels:", kmeans.labels_)
 
-    '''
+    ''''''
     # create dataframe which holds the wrongly classified instances
     wrong_classified_instances = pd.DataFrame(columns=alpha_df.columns)
     y_smote_original = y_test[0:len(y)]
     for i in range(len(y_smote_original)):
-        if y_smote_original[i] != aligned_labels[i]:
+        if y_smote_train[i] != aligned_labels[i]:
             wrong_classified_instances.loc[len(wrong_classified_instances)] = alpha_df.iloc[i] # oob error because of oversampling
             
     print(f"Number of wrongly classified instances: {len(wrong_classified_instances)} from {len(y_smote_original)} instances in the orginal dataset were labeled wrong.")
     print(f"That means that {len(wrong_classified_instances)/len(y_smote_original)*100}% of the instances were labeled wrong.")
     print(f"{len(y_test)-len(y_smote_original)} instances were added by the SMOTE algorithm from which {conf_mat[0,0]+conf_mat[1,1]-(len(y_smote_original)-len(wrong_classified_instances))} were labeled right and {conf_mat[0,1]+conf_mat[1,0]-len(wrong_classified_instances)} were labeled wrong.")
-    '''
+    
     # Plotting the clusters
     plt.scatter(X_test_scaled[:, 0], X_test_scaled[:, 1], c=aligned_labels, cmap='viridis', marker='o')
     plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s=200, c='red', label='Centroids')
