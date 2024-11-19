@@ -13,7 +13,7 @@ from braindecode.datautil.windowers import create_windows_from_events
 from sklearn.model_selection import train_test_split
 
 n_channels = 14
-sampling_rate = 128
+sampling_rate = 256
 
 # add the labels to the raw data
 # Load the labeled Alpha band features
@@ -43,25 +43,15 @@ print(channel_names)
 channel_types = ['eeg'] * n_channels  # declare them as eeg channels
 info = create_info(ch_names=channel_names, sfreq=sampling_rate, ch_types=channel_types)
 # convert X to 14 x len(X) array
-#X = X.T
-#raw = RawArray(X, info)
+XT = X.T
+raw = RawArray(XT, info)
 '''
-for dfs in dfs_raw_with_labels:
-    
-    print(dfs.head())
-    #eeg_data = dfs.iloc[:, :-2].values
-    #print(eeg_data)
-    #n_channels = (eeg_data.shape[1] - 2)
-    labels = dfs['label']
-
-    channel_names = dfs.columns[:-1].tolist()  # names eeg-channels
-    channel_types = ['eeg'] * n_channels  # declare them as eeg channels
-
-    info = create_info(ch_names=channel_names, sfreq=sampling_rate, ch_types=channel_types)
-
-    # convert eeg data in MNE-RawArray
-    eeg_mne_data = eeg_data_reshaped.reshape(n_samples * window_size, n_channels).T
-    raw = RawArray(eeg_mne_data, info)
+channel_names = dfs.columns[:-1].tolist()  # names eeg-channels
+channel_types = ['eeg'] * n_channels  # declare them as eeg channels
+info = create_info(ch_names=channel_names, sfreq=sampling_rate, ch_types=channel_types)
+# convert eeg data in MNE-RawArray
+eeg_mne_data = eeg_data_reshaped.reshape(n_samples * window_size, n_channels).T
+raw = RawArray(eeg_mne_data, info)
 '''
 # Split in train and test set
 train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.25, random_state=42)
@@ -72,12 +62,11 @@ train_labels = torch.tensor(train_labels.values, dtype=torch.long)
 test_labels = torch.tensor(test_labels.values, dtype=torch.long)
 # Modell init
 n_classes = len(np.unique(y))  # number of classes (in paper = 2)
-input_window_samples = df_all_participants_raw.shape[0]  # size of window
-print(input_window_samples)
+n_times = sampling_rate
 model = EEGNetv4(
     n_classes=n_classes,
     in_chans=n_channels,
-    input_window_samples=input_window_samples,
+    input_window_samples=n_times,
     final_conv_length="auto",
 )
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
