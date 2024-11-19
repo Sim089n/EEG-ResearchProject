@@ -105,8 +105,8 @@ def extract_window_features(data, fs, band, n_channels):
     return np.array(features)
 
 #----------------- Load and preprocess the EEG data -----------------#
-def main(#num_trustlevels: int = typer.Option(
-         #  help="number of trustlevels which we want to classify"),
+def main(create_models: bool = typer.Option(
+           help="Set to true if you want to create the SVM and kmeans Clustering models"),
         preprocessing_needed: bool = typer.Option(
             help="True or false depending on if preprocessing was already done or not. If labeled csv \
             files are already existing it is not needed"),
@@ -173,8 +173,8 @@ def main(#num_trustlevels: int = typer.Option(
             # Display the power values in each frequency band for the first few channels
             band_power_df.head()
             # Save the processed EEG data to a new CSV file
-            if not os.path.exists(f'preprocessed/processed_eeg_data_{file_path.replace(data_path, '')}.csv'):
-                output_file = (f'processed_eeg_data_{file_path.replace(data_path, '')}.csv')
+            if not os.path.exists(f'data/preprocessed/processed_eeg_data_{file_path.replace(data_path, '')}.csv'):
+                output_file = (f'data/preprocessed/processed_eeg_data_{file_path.replace(data_path, '')}.csv')
                 band_power_df.to_csv(output_file)
 
             #------------------- Feature Extraction Part of the Loop -------------------#
@@ -192,8 +192,8 @@ def main(#num_trustlevels: int = typer.Option(
 
             # Display the first few rows of the extracted features
             alpha_features_df.head()
-            if not os.path.exists(f'features_Alpha_{file_path.replace(data_path, '')}.csv'):
-                output_file_alpha_features = (f'features_Alpha_{file_path.replace(data_path, '')}.csv')
+            if not os.path.exists(f'data/features/features_Alpha_{file_path.replace(data_path, '')}.csv'):
+                output_file_alpha_features = (f'data/features/features_Alpha_{file_path.replace(data_path, '')}.csv')
                 alpha_features_df.to_csv(output_file_alpha_features)
 
             # do the labeling of each row depending on the details.csv file
@@ -260,224 +260,232 @@ def main(#num_trustlevels: int = typer.Option(
                     print(f"Error processing row {index}: {e}")
             
             # Save the processed EEG data to a new CSV file
-            if not os.path.exists(f'labeled_Alpha_{file_path.replace(data_path, '')}.csv'):
-                output_file_alpha_features = (f'labeled_Alpha_{file_path.replace(data_path, '')}.csv')
-                alpha_features_df.to_csv(output_file_alpha_features)
+            if flag_all_phases == True:
+                if not os.path.exists(f'data/labelingAll/AllPhases_labeled_Alpha_{file_path.replace(data_path, '')}.csv'):
+                    output_file_alpha_features = (f'data/labelingAll/AllPhases_labeled_Alpha_{file_path.replace(data_path, '')}.csv')
+                    alpha_features_df.to_csv(output_file_alpha_features)
+            else:
+                if not os.path.exists(f'data/labeling3and4/labeled_Alpha_{file_path.replace(data_path, '')}.csv'):
+                    output_file_alpha_features = (f'data/labeling3and4/labeled_Alpha_{file_path.replace(data_path, '')}.csv')
+                    alpha_features_df.to_csv(output_file_alpha_features)
 
     #-----------------End of Preprocessing -----------------#
-                
+    
+
     #----------------- Machine Learning Models -----------------#
 
     # create a support vector machine which is trained on the features alpha files
     # the labels are the trust_score_binary from the details.csv file
     # the model should be saved as a pickle file and can be used in the main file
 
-    # Load the labeled Alpha band features
-    df_frames = []
-    for file in glob.glob('labeled_Alpha_*.csv'): # os.path.join(path_labeled_csvfiles,
-        # Load the first file to inspect its structure
-        alpha_df = pd.read_csv(file, index_col=0)
-        # only consider the rows with a label
-        alpha_df_with_label = alpha_df.dropna()
-        # add the participant/file ID as the first column to the dataframe
-        alpha_df_with_label.insert(0, 'Participant_ID', file[file.find("ID")+3]+file[file.find("ID")+4])
-        df_frames.append(alpha_df_with_label)
-
-    # Concatenate the DataFrames to get our dataset --> includes all participants in stages 3 and 4
-    alpha_df = pd.concat(df_frames)
-    # value_counts pandas function -> count
-    print(alpha_df['label'].value_counts())
-    # make histogram of value counts per label
-    alpha_df['label'].value_counts().plot(kind='bar')
-    os.makedirs(os.path.dirname('plots/'), exist_ok=True)
-    plt.savefig('plots/value_counts_trust_classes.png')
-    plt.show(block=False)
-    # Split dataset into training set and test set
-    X = alpha_df[['Mean', 'Peak', 'Std', 'Kurtosis']]  # Features
-    y = alpha_df['label']  # Labels
-    df_low_high_trust_counts_per_participant=alpha_df.groupby(['Participant_ID']).agg('label').value_counts()
-    print(df_low_high_trust_counts_per_participant)
-    if not os.path.exists(f'low_high_trust_counts_per_participant.csv'):
-                output_file_low_high_trust_counts = (f'low_high_trust_counts_per_participant.csv')
-                df_low_high_trust_counts_per_participant.to_csv(output_file_low_high_trust_counts)
-    
-    # plot the value counts of the trust classes per participant
-    alpha_df.groupby('Participant_ID')['label'].value_counts().unstack().plot(kind='bar', stacked=True)
-    # Augmentation approach to balance the amount of high and low trust instances
-    # include SMOTE to balance the dataset
-    # Apply SMOTE to create synthetic samples
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y) # 70% training and 30% test
-    # add minmax scaler
-    minmax_scaler = MinMaxScaler()
-    X_train_scaled = minmax_scaler.fit_transform(X_train)
-    X_train_df = pd.DataFrame(X_train_scaled, columns=X.columns, index=X_train.index)
-
-    X_test_scaled = minmax_scaler.transform(X_test)
-    X_test_df = pd.DataFrame(X_test_scaled, columns=X.columns, index=X_test.index)
-
-    smote = SMOTE(sampling_strategy='auto', random_state=42)
-    X_smote_train, y_smote_train = smote.fit_resample(X_train_df, y_train)
-   
-    #Create a svm Classifier
-    svm_clf = svm.SVC(C=0.5, class_weight="balanced") # Linear Kernel
-    # Define Stratified K-Folds
-    skf = StratifiedKFold(n_splits=5)  # 5-fold cross-validation
-
-    # Initialize lists to collect scores for each fold
-    accuracy_scores = []
-    precision_scores = []
-    recall_scores = []
-
-    # Loop through each fold
-    for train_index, test_index in skf.split(X_smote_train, y_smote_train):
-        X_train_fold, X_test_fold = X_smote_train.iloc[train_index], X_smote_train.iloc[test_index]
-        y_train_fold, y_test_fold = y_smote_train.iloc[train_index], y_smote_train.iloc[test_index]
+    if create_models == True:            
         
-        # Train on fold
-        svm_clf.fit(X_train_fold, y_train_fold)
+        # Load the labeled Alpha band features
+        df_frames = []
+        for file in glob.glob('data/labeling3and4/labeled_Alpha_*.csv'): # os.path.join(path_labeled_csvfiles,
+            # Load the first file to inspect its structure
+            alpha_df = pd.read_csv(file, index_col=0)
+            # only consider the rows with a label
+            alpha_df_with_label = alpha_df.dropna()
+            # add the participant/file ID as the first column to the dataframe
+            alpha_df_with_label.insert(0, 'Participant_ID', file[file.find("ID")+3]+file[file.find("ID")+4])
+            df_frames.append(alpha_df_with_label)
+
+        # Concatenate the DataFrames to get our dataset --> includes all participants in stages 3 and 4
+        alpha_df = pd.concat(df_frames)
+        # value_counts pandas function -> count
+        print(alpha_df['label'].value_counts())
+        # make histogram of value counts per label
+        alpha_df['label'].value_counts().plot(kind='bar')
+        os.makedirs(os.path.dirname('plots/'), exist_ok=True)
+        plt.savefig('plots/value_counts_trust_classes.png')
+        plt.show(block=False)
+        # Split dataset into training set and test set
+        X = alpha_df[['Mean', 'Peak', 'Std', 'Kurtosis']]  # Features
+        y = alpha_df['label']  # Labels
+        df_low_high_trust_counts_per_participant=alpha_df.groupby(['Participant_ID']).agg('label').value_counts()
+        print(df_low_high_trust_counts_per_participant)
+        if not os.path.exists(f'low_high_trust_counts_per_participant.csv'):
+                    output_file_low_high_trust_counts = (f'low_high_trust_counts_per_participant.csv')
+                    df_low_high_trust_counts_per_participant.to_csv(output_file_low_high_trust_counts)
         
-        # Predict on test fold
-        y_pred_fold = svm_clf.predict(X_test_fold)
-        
-        # Calculate metrics
-        accuracy_scores.append(accuracy_score(y_test_fold, y_pred_fold))
-        precision_scores.append(precision_score(y_test_fold, y_pred_fold, average='binary'))  # Adjust for binary/multiclass
-        recall_scores.append(recall_score(y_test_fold, y_pred_fold, average='binary'))
+        # plot the value counts of the trust classes per participant
+        alpha_df.groupby('Participant_ID')['label'].value_counts().unstack().plot(kind='bar', stacked=True)
+        # Augmentation approach to balance the amount of high and low trust instances
+        # include SMOTE to balance the dataset
+        # Apply SMOTE to create synthetic samples
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y) # 70% training and 30% test
+        # add minmax scaler
+        minmax_scaler = MinMaxScaler()
+        X_train_scaled = minmax_scaler.fit_transform(X_train)
+        X_train_df = pd.DataFrame(X_train_scaled, columns=X.columns, index=X_train.index)
 
-    # Calculate average scores
-    avg_accuracy = np.mean(accuracy_scores)
-    avg_precision = np.mean(precision_scores)
-    avg_recall = np.mean(recall_scores)
-    print("---------------------------------------------------------------------")
-    print("SVM Training:")
-    print(f"Average Training Accuracy: {avg_accuracy}")
-    print(f"Average Training Precision: {avg_precision}")
-    print(f"Average Training Recall: {avg_recall}")
+        X_test_scaled = minmax_scaler.transform(X_test)
+        X_test_df = pd.DataFrame(X_test_scaled, columns=X.columns, index=X_test.index)
+
+        smote = SMOTE(sampling_strategy='auto', random_state=42)
+        X_smote_train, y_smote_train = smote.fit_resample(X_train_df, y_train)
     
-    #Train the model using the training sets
-    #svm_clf.fit(X_train, y_train)
+        #Create a svm Classifier
+        svm_clf = svm.SVC(C=0.5, class_weight="balanced") # Linear Kernel
+        # Define Stratified K-Folds
+        skf = StratifiedKFold(n_splits=5)  # 5-fold cross-validation
 
-    #Predict the response for test dataset
-    y_pred = svm_clf.predict(X_test_df)
+        # Initialize lists to collect scores for each fold
+        accuracy_scores = []
+        precision_scores = []
+        recall_scores = []
 
-    print("---------------------------------------------------------------------")
-    print("SVM Classification Results:")
-    # Model Accuracy: how often is the classifier correct
-    print("Accuracy SVM:",metrics.balanced_accuracy_score(y_test, y_pred)) 
-    # Model Precision: what percentage of positive tuples are labeled as such
-    print("Precision SVM:",metrics.precision_score(y_test, y_pred, average='weighted'))
-    # Model Recall: what percentage of positive tuples are labelled as such
-    print("Recall SVM:",metrics.recall_score(y_test, y_pred, average='weighted'))
-    # Model F1 Score: weighted average of the precision and recall
-    print("F1 Score SVM:",metrics.f1_score(y_test, y_pred, average='weighted'))
-    # Confusion Matrix
-    print("Confusion Matrix SVM:\n",metrics.confusion_matrix(y_test, y_pred))
-
-    #--------------------------------------------- k-means clustering ---------------------------------------------#
-
-    # create a k-means clustering algorithm which is trained on the features alpha files
-    # the labels are the trust_score_binary from the details.csv file
-    # the model should be saved as a pickle file and can be used in the main file
-    scaler_kmeans = StandardScaler()
-    X_train_scaled_features = scaler_kmeans.fit_transform(X_smote_train)
-    X_test_scaled = scaler_kmeans.transform(X_test)
-    kmeans_kwargs = {
-        "init": "random",
-        "n_init": 10,
-        "max_iter": 300,
-        "random_state": 42,
-    }
-
-    #graph = sns.PairGrid(alpha_df, hue="label")
-    #graph.map(sns.scatterplot)
-    #graph.add_legend()
-
-    # A list holds the SSE values for each k
-    sse = []
-    for k in range(1, 11):
-        kmeans = KMeans(n_clusters=k, **kmeans_kwargs)
-        kmeans.fit(X_train_scaled_features)
-        sse.append(kmeans.inertia_)
-
-    # print the ellbow plot
-    plt.style.use("fivethirtyeight")
-    plt.plot(range(1, 11), sse)
-    plt.xticks(range(1, 11))
-    plt.xlabel("Number of Clusters")
-    plt.ylabel("SSE")
-    # svae plot
-    # Ensure the directory exists
-    os.makedirs(os.path.dirname('plots/'), exist_ok=True)
-    plt.savefig('plots/elbow_plot.png')
-    plt.show(block=False)
-
-    # Fit kmeans with 2 clusters for this example
-    kmeans = KMeans(init="random", n_clusters=2, n_init=10, max_iter=300, random_state=42)
-    kmeans.fit(X_train_scaled_features)
-
-    y_prediction_train = kmeans.predict(X_train_scaled_features)
-    y_prediction_test = kmeans.predict(X_test_scaled)
-    print(f"Crosstab 2 clusters: {pd.crosstab(y_test, y_prediction_test)}")
-    # Generate the contingency matrix
-    contingency_matrix = metrics.cluster.contingency_matrix(y_test, y_prediction_test)
-
-    # Find the best label alignment using the Hungarian algorithm
-    row_ind, col_ind = linear_sum_assignment(-contingency_matrix)
-    aligned_labels = np.zeros_like(y_prediction_test)
-    for i, j in zip(row_ind, col_ind):
-        aligned_labels[y_prediction_test == j] = i
-
-    
-    # check what the participants wrote in their questionnaire is represented in the EEG data as well
-    # find the instances where it is not matching -> keep those instances and go back to the features and try to gain information based on the raw and processed data
-    # Calculate metrics
-    accuracy = metrics.balanced_accuracy_score(y_test, aligned_labels)
-    precision = metrics.precision_score(y_test, aligned_labels, average='weighted')
-    recall = metrics.recall_score(y_test, aligned_labels, average='weighted')
-    f1 = metrics.f1_score(y_test, aligned_labels, average='weighted')
-    conf_mat = metrics.confusion_matrix(y_test, aligned_labels)
-    print("---------------------------------------------------------------------")
-    print("KMeans Clustering Results:")
-    print("Silhouette Score:", silhouette_score(X_test_scaled, aligned_labels))
-    print(f"Accuracy k-means: {accuracy:.4f}")
-    print(f"Precision k-means: {precision:.4f}")
-    print(f"Recall k-means: {recall:.4f}")
-    print(f"Confusion Matrix k-means:\n{conf_mat}")
-    print(f"F1 Score k-means: {f1:.4f}")
-    print(f"Inertia k-means: {kmeans.inertia_:.4f}")
-    print(f"Cluster Centers:", kmeans.cluster_centers_)
-    print(f"Number of Iterations: {kmeans.n_iter_:.4f}")
-    print(f"Labels:", kmeans.labels_)
-
-    ''''''
-    # create dataframe which holds the wrongly classified instances
-    wrong_classified_instances = pd.DataFrame(columns=alpha_df.columns)
-    y_smote_original = y_test[0:len(y)]
-    for i in range(len(y_smote_original)):
-        if y_smote_train[i] != aligned_labels[i]:
-            wrong_classified_instances.loc[len(wrong_classified_instances)] = alpha_df.iloc[i] # oob error because of oversampling
+        # Loop through each fold
+        for train_index, test_index in skf.split(X_smote_train, y_smote_train):
+            X_train_fold, X_test_fold = X_smote_train.iloc[train_index], X_smote_train.iloc[test_index]
+            y_train_fold, y_test_fold = y_smote_train.iloc[train_index], y_smote_train.iloc[test_index]
             
-    print(f"Number of wrongly classified instances: {len(wrong_classified_instances)} from {len(y_smote_original)} instances in the orginal dataset were labeled wrong.")
-    print(f"That means that {len(wrong_classified_instances)/len(y_smote_original)*100}% of the instances were labeled wrong.")
-    print(f"{len(y_test)-len(y_smote_original)} instances were added by the SMOTE algorithm from which {conf_mat[0,0]+conf_mat[1,1]-(len(y_smote_original)-len(wrong_classified_instances))} were labeled right and {conf_mat[0,1]+conf_mat[1,0]-len(wrong_classified_instances)} were labeled wrong.")
-    
-    # Plotting the clusters
-    plt.scatter(X_test_scaled[:, 0], X_test_scaled[:, 1], c=aligned_labels, cmap='viridis', marker='o')
-    plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s=200, c='red', label='Centroids')
-    plt.legend()
-    # Ensure the directory exists
-    os.makedirs(os.path.dirname('plots/'), exist_ok=True)
-    plt.savefig('plots/kmeans_clusters.png') 
-    plt.show(block=False)
+            # Train on fold
+            svm_clf.fit(X_train_fold, y_train_fold)
+            
+            # Predict on test fold
+            y_pred_fold = svm_clf.predict(X_test_fold)
+            
+            # Calculate metrics
+            accuracy_scores.append(accuracy_score(y_test_fold, y_pred_fold))
+            precision_scores.append(precision_score(y_test_fold, y_pred_fold, average='binary'))  # Adjust for binary/multiclass
+            recall_scores.append(recall_score(y_test_fold, y_pred_fold, average='binary'))
 
-    #-----------------do the k-means with 4 clusters-----------------#
-    kmeans = KMeans(init="random", n_clusters=4, n_init=10, max_iter=300, random_state=42)
-    kmeans.fit(X_train_scaled_features)
+        # Calculate average scores
+        avg_accuracy = np.mean(accuracy_scores)
+        avg_precision = np.mean(precision_scores)
+        avg_recall = np.mean(recall_scores)
+        print("---------------------------------------------------------------------")
+        print("SVM Training:")
+        print(f"Average Training Accuracy: {avg_accuracy}")
+        print(f"Average Training Precision: {avg_precision}")
+        print(f"Average Training Recall: {avg_recall}")
+        
+        #Train the model using the training sets
+        #svm_clf.fit(X_train, y_train)
 
-    y_prediction_train = kmeans.predict(X_train_scaled_features)
-    y_prediction_test = kmeans.predict(X_test_scaled)
-    # cross tabulation
-    print(f"Crosstab 4 clusters: {pd.crosstab(y_test, y_prediction_test)}")
+        #Predict the response for test dataset
+        y_pred = svm_clf.predict(X_test_df)
+
+        print("---------------------------------------------------------------------")
+        print("SVM Classification Results:")
+        # Model Accuracy: how often is the classifier correct
+        print("Accuracy SVM:",metrics.balanced_accuracy_score(y_test, y_pred)) 
+        # Model Precision: what percentage of positive tuples are labeled as such
+        print("Precision SVM:",metrics.precision_score(y_test, y_pred, average='weighted'))
+        # Model Recall: what percentage of positive tuples are labelled as such
+        print("Recall SVM:",metrics.recall_score(y_test, y_pred, average='weighted'))
+        # Model F1 Score: weighted average of the precision and recall
+        print("F1 Score SVM:",metrics.f1_score(y_test, y_pred, average='weighted'))
+        # Confusion Matrix
+        print("Confusion Matrix SVM:\n",metrics.confusion_matrix(y_test, y_pred))
+
+        #--------------------------------------------- k-means clustering ---------------------------------------------#
+
+        # create a k-means clustering algorithm which is trained on the features alpha files
+        # the labels are the trust_score_binary from the details.csv file
+        # the model should be saved as a pickle file and can be used in the main file
+        scaler_kmeans = StandardScaler()
+        X_train_scaled_features = scaler_kmeans.fit_transform(X_smote_train)
+        X_test_scaled = scaler_kmeans.transform(X_test)
+        kmeans_kwargs = {
+            "init": "random",
+            "n_init": 10,
+            "max_iter": 300,
+            "random_state": 42,
+        }
+
+        #graph = sns.PairGrid(alpha_df, hue="label")
+        #graph.map(sns.scatterplot)
+        #graph.add_legend()
+
+        # A list holds the SSE values for each k
+        sse = []
+        for k in range(1, 11):
+            kmeans = KMeans(n_clusters=k, **kmeans_kwargs)
+            kmeans.fit(X_train_scaled_features)
+            sse.append(kmeans.inertia_)
+
+        # print the ellbow plot
+        plt.style.use("fivethirtyeight")
+        plt.plot(range(1, 11), sse)
+        plt.xticks(range(1, 11))
+        plt.xlabel("Number of Clusters")
+        plt.ylabel("SSE")
+        # svae plot
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname('plots/'), exist_ok=True)
+        plt.savefig('plots/elbow_plot.png')
+        plt.show(block=False)
+
+        # Fit kmeans with 2 clusters for this example
+        kmeans = KMeans(init="random", n_clusters=2, n_init=10, max_iter=300, random_state=42)
+        kmeans.fit(X_train_scaled_features)
+
+        y_prediction_train = kmeans.predict(X_train_scaled_features)
+        y_prediction_test = kmeans.predict(X_test_scaled)
+        print(f"Crosstab 2 clusters: {pd.crosstab(y_test, y_prediction_test)}")
+        # Generate the contingency matrix
+        contingency_matrix = metrics.cluster.contingency_matrix(y_test, y_prediction_test)
+
+        # Find the best label alignment using the Hungarian algorithm
+        row_ind, col_ind = linear_sum_assignment(-contingency_matrix)
+        aligned_labels = np.zeros_like(y_prediction_test)
+        for i, j in zip(row_ind, col_ind):
+            aligned_labels[y_prediction_test == j] = i
+
+        
+        # check what the participants wrote in their questionnaire is represented in the EEG data as well
+        # find the instances where it is not matching -> keep those instances and go back to the features and try to gain information based on the raw and processed data
+        # Calculate metrics
+        accuracy = metrics.balanced_accuracy_score(y_test, aligned_labels)
+        precision = metrics.precision_score(y_test, aligned_labels, average='weighted')
+        recall = metrics.recall_score(y_test, aligned_labels, average='weighted')
+        f1 = metrics.f1_score(y_test, aligned_labels, average='weighted')
+        conf_mat = metrics.confusion_matrix(y_test, aligned_labels)
+        print("---------------------------------------------------------------------")
+        print("KMeans Clustering Results:")
+        print("Silhouette Score:", silhouette_score(X_test_scaled, aligned_labels))
+        print(f"Accuracy k-means: {accuracy:.4f}")
+        print(f"Precision k-means: {precision:.4f}")
+        print(f"Recall k-means: {recall:.4f}")
+        print(f"Confusion Matrix k-means:\n{conf_mat}")
+        print(f"F1 Score k-means: {f1:.4f}")
+        print(f"Inertia k-means: {kmeans.inertia_:.4f}")
+        print(f"Cluster Centers:", kmeans.cluster_centers_)
+        print(f"Number of Iterations: {kmeans.n_iter_:.4f}")
+        print(f"Labels:", kmeans.labels_)
+
+        ''''''
+        # create dataframe which holds the wrongly classified instances
+        wrong_classified_instances = pd.DataFrame(columns=alpha_df.columns)
+        y_smote_original = y_test[0:len(y)]
+        for i in range(len(y_smote_original)):
+            if y_smote_train[i] != aligned_labels[i]:
+                wrong_classified_instances.loc[len(wrong_classified_instances)] = alpha_df.iloc[i] # oob error because of oversampling
+                
+        print(f"Number of wrongly classified instances: {len(wrong_classified_instances)} from {len(y_smote_original)} instances in the orginal dataset were labeled wrong.")
+        print(f"That means that {len(wrong_classified_instances)/len(y_smote_original)*100}% of the instances were labeled wrong.")
+        print(f"{len(y_test)-len(y_smote_original)} instances were added by the SMOTE algorithm from which {conf_mat[0,0]+conf_mat[1,1]-(len(y_smote_original)-len(wrong_classified_instances))} were labeled right and {conf_mat[0,1]+conf_mat[1,0]-len(wrong_classified_instances)} were labeled wrong.")
+        
+        # Plotting the clusters
+        plt.scatter(X_test_scaled[:, 0], X_test_scaled[:, 1], c=aligned_labels, cmap='viridis', marker='o')
+        plt.scatter(kmeans.cluster_centers_[:, 0], kmeans.cluster_centers_[:, 1], s=200, c='red', label='Centroids')
+        plt.legend()
+        # Ensure the directory exists
+        os.makedirs(os.path.dirname('plots/'), exist_ok=True)
+        plt.savefig('plots/kmeans_clusters.png') 
+        plt.show(block=False)
+
+        #-----------------do the k-means with 4 clusters-----------------#
+        kmeans = KMeans(init="random", n_clusters=4, n_init=10, max_iter=300, random_state=42)
+        kmeans.fit(X_train_scaled_features)
+
+        y_prediction_train = kmeans.predict(X_train_scaled_features)
+        y_prediction_test = kmeans.predict(X_test_scaled)
+        # cross tabulation
+        print(f"Crosstab 4 clusters: {pd.crosstab(y_test, y_prediction_test)}")
     
 
 
