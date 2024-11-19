@@ -43,8 +43,8 @@ print(channel_names)
 channel_types = ['eeg'] * n_channels  # declare them as eeg channels
 info = create_info(ch_names=channel_names, sfreq=sampling_rate, ch_types=channel_types)
 # convert X to 14 x len(X) array
-X = X.T
-raw = RawArray(X, info)
+#X = X.T
+#raw = RawArray(X, info)
 '''
 for dfs in dfs_raw_with_labels:
     
@@ -64,31 +64,31 @@ for dfs in dfs_raw_with_labels:
     raw = RawArray(eeg_mne_data, info)
 '''
 # Split in train and test set
-train_data, test_data, train_labels, test_labels = train_test_split(raw, y, test_size=0.25, random_state=42)
+train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.25, random_state=42)
 
-train_data = torch.tensor(train_data, dtype=torch.float32)
-test_data = torch.tensor(test_data, dtype=torch.float32)
-train_labels = torch.tensor(train_labels, dtype=torch.long)
-test_labels = torch.tensor(test_labels, dtype=torch.long)
-
+train_data = torch.tensor(train_data.values, dtype=torch.float32)
+test_data = torch.tensor(test_data.values, dtype=torch.float32)
+train_labels = torch.tensor(train_labels.values, dtype=torch.long)
+test_labels = torch.tensor(test_labels.values, dtype=torch.long)
 # Modell init
 n_classes = len(np.unique(y))  # number of classes (in paper = 2)
 input_window_samples = df_all_participants_raw.shape[0]  # size of window
+print(input_window_samples)
 model = EEGNetv4(
     n_classes=n_classes,
     in_chans=n_channels,
     input_window_samples=input_window_samples,
     final_conv_length="auto",
 )
-optimizer = Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 criterion = torch.nn.CrossEntropyLoss()
 
 # train the model
-classifier = EEGClassifier(model, criterion, optimizer, train_split=None)
-classifier.fit(train_data, train_labels, epochs=100)
+EEGclassifier = EEGClassifier(model, criterion=criterion, lr=0.001, train_split=None)
+EEGclassifier.fit(train_data, train_labels, epochs=10)
 
 # Evaluation
-y_pred = classifier.predict(test_data)
+y_pred = EEGclassifier.predict(test_data)
 accuracy = accuracy_score(test_labels.numpy(), y_pred)
 balanced_accuracy = balanced_accuracy_score(test_labels.numpy(), y_pred)
 print(f"Accuracy: {accuracy * 100:.2f}%")
