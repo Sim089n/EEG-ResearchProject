@@ -110,14 +110,14 @@ def main(create_models: bool = typer.Option(
         preprocessing_needed: bool = typer.Option(
             help="True or false depending on if preprocessing was already done or not. If labeled csv \
             files are already existing it is not needed"),
-        #path_labeled_csvfiles: str = typer.Option(
-        #    help= "Give the path to the labeled csv files if they are already existing"),
+        path_labeled_csvfiles: str = typer.Option(
+            help= "Give the path to the labeled csv files you want to use for the machine learning models"),
         flag_all_phases: bool = typer.Option(
             help="True or false depending on if we want to include all phases in the classification")
         ):
     if preprocessing_needed == True:
         # Load the provided EEG dataset
-        data_path = 'data/'
+        data_path = 'data/raw/'
         files = []
         for file in glob.glob(os.path.join(data_path, '*.csv') ):
             files.append(file)
@@ -282,7 +282,7 @@ def main(create_models: bool = typer.Option(
         
         # Load the labeled Alpha band features
         df_frames = []
-        for file in glob.glob('data/labeling3and4/labeled_Alpha_*.csv'): # os.path.join(path_labeled_csvfiles,
+        for file in glob.glob(os.path.join(path_labeled_csvfiles,'*.csv')):
             # Load the first file to inspect its structure
             alpha_df = pd.read_csv(file, index_col=0)
             # only consider the rows with a label

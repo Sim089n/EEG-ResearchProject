@@ -57,8 +57,12 @@ raw = RawArray(eeg_mne_data, info)
 train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.25, random_state=42)
 
 train_data = torch.tensor(train_data.values, dtype=torch.float32)
+print(train_data.shape)
+print(train_data)
 test_data = torch.tensor(test_data.values, dtype=torch.float32)
 train_labels = torch.tensor(train_labels.values, dtype=torch.long)
+print(train_labels.shape)
+print(train_labels)
 test_labels = torch.tensor(test_labels.values, dtype=torch.long)
 # Modell init
 n_classes = len(np.unique(y))  # number of classes (in paper = 2)

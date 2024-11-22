@@ -6,53 +6,84 @@ from imblearn.over_sampling import SMOTE
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, TensorDataset, random_split
 from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
 import pandas as pd
 import glob
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, balanced_accuracy_score
 
 class EEGTrustClassifier(nn.Module):
-    def __init__(self):
+    def __init__(self, input_size=4):
         super(EEGTrustClassifier, self).__init__()
-        # 1D Convolutional Layer
-        self.conv1 = nn.Conv1d(in_channels=1, out_channels=16, kernel_size=3, padding=1)
-        self.pool = nn.MaxPool1d(kernel_size=2)
         
-        # LSTM Layer
-        self.lstm = nn.LSTM(input_size=16, hidden_size=32, num_layers=2, batch_first=True)
+        # Input Layer Transformation
+        self.fc_input = nn.Linear(input_size, 128)
+        self.bn_input = nn.BatchNorm1d(128)
         
-        # Fully Connected Layers
-        self.fc1 = nn.Linear(32, 16)
-        self.fc2 = nn.Linear(16, 1)
+        # Multi-Layer Perceptron with Residual Connections
+        self.fc1 = nn.Linear(128, 128)
+        self.bn1 = nn.BatchNorm1d(128)
+        self.dropout1 = nn.Dropout(0.4)
+        
+        self.fc2 = nn.Linear(128, 128)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.dropout2 = nn.Dropout(0.4)
+        
+        # Attention Mechanism
+        self.attention_fc = nn.Linear(128, 1)
+        
+        # Final Fully Connected Layers
+        self.fc3 = nn.Linear(128, 64)
+        self.bn3 = nn.BatchNorm1d(64)
+        self.fc4 = nn.Linear(64, 32)
+        self.bn4 = nn.BatchNorm1d(32)
+        
+        # Output Layer
+        self.output = nn.Linear(32, 1)
         
         # Activation Functions
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
-        
+
     def forward(self, x):
-        x = x.unsqueeze(1)  # Add channel dimension for Conv1D
-        x = self.pool(self.relu(self.conv1(x)))  # Convolutional layer + pooling
-        x = x.permute(0, 2, 1)  # Reshape for LSTM (batch, sequence, features)
+        # Input Layer Transformation
+        x = self.relu(self.bn_input(self.fc_input(x)))
         
-        # LSTM Layer
-        _, (hn, _) = self.lstm(x)
+        # Residual Block 1
+        residual = x
+        x = self.relu(self.bn1(self.fc1(x)))
+        x = self.dropout1(x)
+        x += residual  # Residual connection
         
-        # Fully Connected Layers
-        x = self.relu(self.fc1(hn[-1]))
-        x = self.sigmoid(self.fc2(x))  # Sigmoid for binary classification
+        # Residual Block 2
+        residual = x
+        x = self.relu(self.bn2(self.fc2(x)))
+        x = self.dropout2(x)
+        x += residual  # Residual connection
+        
+        # Attention Mechanism
+        attention_weights = torch.softmax(self.attention_fc(x), dim=0)
+        x = x * attention_weights
+        
+        # Final Fully Connected Layers
+        x = self.relu(self.bn3(self.fc3(x)))
+        x = self.relu(self.bn4(self.fc4(x)))
+        
+        # Output Layer
+        x = self.sigmoid(self.output(x))
         return x
 
 # load csv files
 df_frames = []
-for file in glob.glob('labeled_Alpha_*.csv'): # os.path.join(path_labeled_csvfiles,
+for file in glob.glob('data/labeling3and4/labeled_Alpha_*.csv'): # os.path.join(path_labeled_csvfiles,
     # Load the first file to inspect its structure
     alpha_df = pd.read_csv(file, index_col=0)
     # only consider the rows with a label
     alpha_df_with_label = alpha_df.dropna()
     df_frames.append(alpha_df_with_label)
 
-    # Concatenate the DataFrames to get our dataset --> includes all participants in stages 3 and 4
-    alpha_df = pd.concat(df_frames)
+# Concatenate the DataFrames to get our dataset --> includes all participants in stages 3 and 4
+alpha_df = pd.concat(df_frames)
 
 
 # value_counts pandas function -> count
@@ -61,75 +92,77 @@ print(alpha_df['label'].value_counts())
 alpha_df['label'].value_counts().plot(kind='bar')
 plt.show()
 # Split dataset into training set and test set
-X = alpha_df[['Mean', 'Peak', 'Median', 'Std', 'Kurtosis']]  # Features
+X = alpha_df[['Mean', 'Peak', 'Std', 'Kurtosis']]  # Features
 y = alpha_df['label']  # Labels
-
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
 #------------------------------Add Augmentation Approach-----------------------------------
 # Augmentation approach to balance the amount of high and low trust instances
 # include SMOTE to balance the dataset
 # Apply SMOTE to create synthetic samples
-#smote = SMOTE(sampling_strategy='auto', random_state=42)
-#X_smote, y_smote = smote.fit_resample(X, y)
+smote = SMOTE(sampling_strategy='auto', random_state=42)
+
+X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
 #------------------------------End Augmentation Approach-----------------------------------
-model = EEGTrustClassifier()
 # Standardize the feature data
 scaler = StandardScaler()
-X = scaler.fit_transform(X)
+scaler.fit(X_train_smote)
+X_train_smote_scaled = scaler.transform(X_train_smote)
+X_test_scaled = scaler.transform(X_test)
 
 # Convert data to PyTorch tensors
-X_tensor = torch.tensor(X, dtype=torch.float32)
-y_tensor = torch.tensor(y.to_numpy(dtype=np.float32)).unsqueeze(1)  # Reshape for PyTorch
+X_train_smote_scaled = torch.tensor(X_train_smote_scaled, dtype=torch.float32)
+X_test_scaled = torch.tensor(X_test_scaled, dtype=torch.float32)
+y_train_smote_tensor = torch.tensor(y_train_smote.to_numpy(dtype=np.float32)).unsqueeze(1)
+y_test = torch.tensor(y_test.to_numpy(dtype=np.float32)).unsqueeze(1)
 
 # Create a dataset and split it into training and testing sets
-dataset = TensorDataset(X_tensor, y_tensor)
-train_size = int(0.8 * len(dataset))
-test_size = len(dataset) - train_size
-train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+train_dataset = TensorDataset(X_train_smote_scaled, y_train_smote_tensor)
+test_dataset = TensorDataset(X_test_scaled, y_test)
 
 # Define data loaders for batching
 train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
-
-criterion = nn.BCELoss()
+model = EEGTrustClassifier()
+criterion = nn.BCEWithLogitsLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
+scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=1e-6)
 
 #---------------------------------------Training Loop---------------------------------------
-accuracy_scores_train = []
-recall_scores_train = []
-precision_scores_train = []
-f1_train =[]
 
 epoch_loss_train = []
 mean_epoch_accuracy_train = []
 mean_epoch_precision_train = []
 mean_epoch_recall_train = []
 mean_epoch_f1_train = []
-num_epochs = 100
+num_epochs = 20
 for epoch in range(num_epochs):
     model.train()
+    epoch_loss = 0
+    all_predictions = []
+    all_labels = []
     for X_batch, y_batch in train_loader:
         optimizer.zero_grad()
         predictions = model(X_batch)
         loss = criterion(predictions, y_batch)
         loss.backward()
         optimizer.step()
-        predictions_binary_train = (predictions >= 0.5).float()
-        accuracy_scores_train.append(accuracy_score(y_batch, predictions_binary_train))
-        precision_scores_train.append(precision_score(y_batch, predictions_binary_train, average='binary'))
-        recall_scores_train.append(recall_score(y_batch, predictions_binary_train, average='binary'))
-        f1_train.append(f1_score(y_batch, predictions_binary_train))
-    epoch_loss_train.append(loss.item())
-    mean_epoch_accuracy_train.append(np.mean(accuracy_scores_train))
-    mean_epoch_precision_train.append(np.mean(precision_scores_train))
-    mean_epoch_recall_train.append(np.mean(recall_scores_train))
-    mean_epoch_f1_train.append(np.mean(f1_train))
+
+        epoch_loss += loss.item()
+        all_predictions.extend((predictions >= 0.5).cpu().numpy())
+        all_labels.extend(y_batch.cpu().numpy())
+    epoch_loss_train.append(epoch_loss / len(train_loader))
+    mean_epoch_accuracy_train.append(accuracy_score(all_labels, all_predictions))
+    mean_epoch_precision_train.append(precision_score(all_labels, all_predictions))
+    mean_epoch_recall_train.append(recall_score(all_labels, all_predictions))
+    mean_epoch_f1_train.append(f1_score(all_labels, all_predictions))
     print("---------------------------------------------------------------------")
-    print(f'Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}')
+    print(f'Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss_train[-1]:.4f}')
     print(f"Average Training Accuracy: {mean_epoch_accuracy_train[-1]}")
     print(f"Average Training Precision: {mean_epoch_precision_train[-1]}")
     print(f"Average Training Recall: {mean_epoch_recall_train[-1]}")
     print(f"Average Training F1 Score: {mean_epoch_f1_train[-1]}")
-   # print(f"Average Training ROC AUC: {np.mean(roc_auc_train)}")
+    # update the learning rate if there is no improvement in the last 5 epochs
+    scheduler.step()
 epochs = np.arange(1, num_epochs+1)
 plt.figure(figsize=(16, 8))
 # plot all the metrics over the cause of the training
@@ -150,50 +183,28 @@ plt.show()
 #---------------------------------------Training Loop---------------------------------------
 
 #----------------------------------------Evaluation-----------------------------------------
-accuracy_scores_test = []
-recall_scores_test = []
-precision_scores_test = []
+accuracy_test = []
+recall_test = []
+precision_test = []
 f1_test = []
 
-mean_epoch_f1_test = []
-mean_epoch_precision_test = []
-mean_epoch_recall_test = []
-
 model.eval()
+all_predictions = []
+all_labels = []
 with torch.no_grad():
-    correct = 0
-    total = 0
     for X_batch, y_batch in test_loader:
         predictions = model(X_batch)
-        predictions_binary_test = (predictions > 0.5).float()  # Convert to binary predictions
-        correct += (predictions_binary_test == y_batch).sum().item()
-        total += y_batch.size(0)
-        accuracy_scores_test.append(balanced_accuracy_score(y_batch, predictions_binary_test))
-        precision_scores_test.append(precision_score(y_batch, predictions_binary_test, average='binary'))
-        recall_scores_test.append(recall_score(y_batch, predictions_binary_test, average='binary'))
-        f1_test.append(f1_score(y_batch, predictions_binary_test))
-        mean_epoch_precision_test.append(np.mean(precision_scores_test))
-        mean_epoch_recall_test.append(np.mean(recall_scores_train))
-        mean_epoch_f1_test.append(np.mean(f1_train))
-        print("---------------------------------------------------------------------")
-        print(f"Average Test Precision: {np.mean(precision_scores_test)}")
-        print(f"Average Test Recall: {np.mean(recall_scores_test)}")
-        print(f"Average Test F1 Score: {np.mean(f1_test)}")
-    accuracy = correct / total
-print(f'Test Accuracy: {accuracy:.2f}')
+        all_predictions.extend((predictions >= 0.5).cpu().numpy())
+        all_labels.extend(y_batch.cpu().numpy())
 
-plt.figure(figsize=(16, 8))
-# plot all the metrics over the cause of the testing phase
-plt.plot(precision_scores_test, label='Precision Test')
-plt.plot(recall_scores_test, label='Recall Test')
-plt.plot(f1_test, label='F1 Score Test')
-#plt.plot(roc_auc_test, label='ROC AUC Score Test')
-plt.xlabel('Iterations')
-plt.ylabel('Metric Value')
-plt.title('Testing Metrics')
-plt.legend()
-# Ensure the directory exists
-os.makedirs(os.path.dirname('plots/'), exist_ok=True)
-plt.savefig('plots/CRNN_testing_metrics.png') 
-plt.show()
+accuracy_test = balanced_accuracy_score(all_labels, all_predictions)
+precision_test = precision_score(all_labels, all_predictions)
+recall_test = recall_score(all_labels, all_predictions,)
+f1_test = f1_score(all_labels, all_predictions)
+print("---------------------------------------------------------------------")
+print(f'Test Accuracy: {accuracy_test:.2f}')
+print(f"Average Test Precision: {precision_test}")
+print(f"Average Test Recall: {recall_test}")
+print(f"Average Test F1 Score: {f1_test}")
+    
 #----------------------------------------Evaluation-----------------------------------------
