@@ -70,7 +70,7 @@ XT = X.T
 raw = RawArray(XT, info)
 '''
 # Split in train and test set
-train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.25, random_state=42)
+train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
 #n_samples, n_channels = X.shape
 
 
@@ -104,7 +104,12 @@ test_data = torch.tensor(test_data, dtype=torch.float32)
 train_labels = torch.tensor(train_labels, dtype=torch.long)
 test_labels = torch.tensor(test_labels, dtype=torch.long)
 
-print(f"Train data shape: {train_data.shape}")
+class_counts = np.bincount(train_labels)
+class_weights = 1.0 / class_counts
+class_weights = torch.tensor(class_weights, dtype=torch.float32)
+print(f"Class counts: {class_counts}")
+print(f"Class weights: {class_weights}")
+
 # Modell init
 n_classes = 2  # number of classes (in paper = 2)
 n_times = sampling_rate
@@ -115,7 +120,7 @@ model = EEGNetv4(
     final_conv_length="auto",
 )
 #optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-criterion = torch.nn.CrossEntropyLoss()
+criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 # Define the scoring function: balanced accuracy
 n_epochs=7
 train_bal_acc = EpochScoring(

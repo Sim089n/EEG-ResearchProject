@@ -28,46 +28,85 @@ class EEGTrustClassifier(nn.Module):
         self.fc2 = nn.Linear(128, 128)
         self.bn2 = nn.BatchNorm1d(128)
         self.dropout2 = nn.Dropout(0.4)
+
+        self.fc3 = nn.Linear(128, 128)
+        self.bn3 = nn.BatchNorm1d(128)
+        self.dropout3 = nn.Dropout(0.4)
+
+        self.fc4 = nn.Linear(128, 128)
+        self.bn4 = nn.BatchNorm1d(128)
+        self.dropout4 = nn.Dropout(0.4)
         
+        self.fc5 = nn.Linear(128, 128)
+        self.bn5 = nn.BatchNorm1d(128)
+        self.dropout5 = nn.Dropout(0.4)
+
+        self.fc6 = nn.Linear(128, 128)
+        self.bn6 = nn.BatchNorm1d(128)
+        self.dropout6 = nn.Dropout(0.4)
         # Attention Mechanism
         self.attention_fc = nn.Linear(128, 1)
         
         # Final Fully Connected Layers
-        self.fc3 = nn.Linear(128, 64)
-        self.bn3 = nn.BatchNorm1d(64)
-        self.fc4 = nn.Linear(64, 32)
-        self.bn4 = nn.BatchNorm1d(32)
+        self.fc7 = nn.Linear(128, 64)
+        self.bn7 = nn.BatchNorm1d(64)
+        self.fc8 = nn.Linear(64, 32)
+        self.bn8 = nn.BatchNorm1d(32)
         
         # Output Layer
         self.output = nn.Linear(32, 1)
         
         # Activation Functions
-        self.relu = nn.ReLU()
+        self.silu = nn.SiLU()
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         # Input Layer Transformation
-        x = self.relu(self.bn_input(self.fc_input(x)))
+        x = self.silu(self.bn_input(self.fc_input(x)))
         
         # Residual Block 1
         residual = x
-        x = self.relu(self.bn1(self.fc1(x)))
+        x = self.silu(self.bn1(self.fc1(x)))
         x = self.dropout1(x)
         x += residual  # Residual connection
         
         # Residual Block 2
         residual = x
-        x = self.relu(self.bn2(self.fc2(x)))
+        x = self.silu(self.bn2(self.fc2(x)))
         x = self.dropout2(x)
         x += residual  # Residual connection
         
+        # Residual Block 3
+        residual = x
+        x = self.silu(self.bn3(self.fc3(x)))
+        x = self.dropout3(x)
+        x += residual  # Residual connection
+
+        # Residual Block 4
+        residual = x
+        x = self.silu(self.bn4(self.fc4(x)))
+        x = self.dropout4(x)
+        x += residual  # Residual connection
+
+        # Residual Block 5
+        residual = x
+        x = self.silu(self.bn5(self.fc5(x)))
+        x = self.dropout5(x)
+        x += residual  # Residual connection
+
+        # Residual Block 6
+        residual = x
+        x = self.silu(self.bn6(self.fc6(x)))
+        x = self.dropout6(x)
+        x += residual  # Residual connection
+
         # Attention Mechanism
         attention_weights = torch.softmax(self.attention_fc(x), dim=0)
         x = x * attention_weights
         
         # Final Fully Connected Layers
-        x = self.relu(self.bn3(self.fc3(x)))
-        x = self.relu(self.bn4(self.fc4(x)))
+        x = self.silu(self.bn7(self.fc8(x)))
+        x = self.silu(self.bn7(self.fc8(x)))
         
         # Output Layer
         x = self.sigmoid(self.output(x))
