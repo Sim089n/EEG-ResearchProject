@@ -105,8 +105,8 @@ class EEGTrustClassifier(nn.Module):
         x = x * attention_weights
         
         # Final Fully Connected Layers
-        x = self.silu(self.bn7(self.fc8(x)))
-        x = self.silu(self.bn7(self.fc8(x)))
+        x = self.silu(self.bn7(self.fc7(x)))
+        x = self.silu(self.bn8(self.fc8(x)))
         
         # Output Layer
         x = self.sigmoid(self.output(x))
@@ -133,7 +133,7 @@ plt.show()
 # Split dataset into training set and test set
 X = alpha_df[['Mean', 'Peak', 'Std', 'Kurtosis']]  # Features
 y = alpha_df['label']  # Labels
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
 #------------------------------Add Augmentation Approach-----------------------------------
 # Augmentation approach to balance the amount of high and low trust instances
 # include SMOTE to balance the dataset
@@ -162,7 +162,7 @@ test_dataset = TensorDataset(X_test_scaled, y_test)
 train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 model = EEGTrustClassifier()
-criterion = nn.BCEWithLogitsLoss()
+criterion = nn.BCELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=1e-6)
 
@@ -173,7 +173,7 @@ mean_epoch_accuracy_train = []
 mean_epoch_precision_train = []
 mean_epoch_recall_train = []
 mean_epoch_f1_train = []
-num_epochs = 20
+num_epochs = 400
 for epoch in range(num_epochs):
     model.train()
     epoch_loss = 0
