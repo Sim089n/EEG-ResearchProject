@@ -11,7 +11,7 @@ from sklearn.metrics import balanced_accuracy_score, accuracy_score
 from mne import create_info
 from mne.io import RawArray
 from braindecode.models import EEGNetv4
-from braindecode.classifier import EEGClassifier
+from braindecode.regressor import EEGRegressor
 from braindecode.datasets import WindowsDataset
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
@@ -131,7 +131,7 @@ train_bal_acc = EpochScoring(
 )
 callbacks = [("train_bal_acc", train_bal_acc), ("lr_scheduler", LRScheduler('CosineAnnealingLR', T_max=n_epochs - 1))]
 # train the model
-EEGclassifier = EEGClassifier(model, 
+EEGregressor = EEGRegressor(model, 
                               criterion=criterion, 
                               optimizer=torch.optim.Adam,
                               lr=0.001, 
@@ -140,12 +140,12 @@ EEGclassifier = EEGClassifier(model,
                               callbacks=callbacks)
 print(train_data.shape)
 print(train_labels.shape)
-EEGclassifier.fit(train_data, train_labels, epochs=200)
-print(EEGClassifier.history)
+EEGregressor.fit(train_data, train_labels, epochs=1)
+print(EEGregressor.history)
 # Extract loss and accuracy values for plotting from history object
 results_columns = ['train_loss', 'train_bal_acc']
-df = pd.DataFrame(EEGclassifier.history[:, results_columns], columns=results_columns,
-                  index=EEGclassifier.history[:, 'epoch'])
+df = pd.DataFrame(EEGregressor.history[:, results_columns], columns=results_columns,
+                  index=EEGregressor.history[:, 'epoch'])
 
 # get percent of misclass for better visual comparison to loss
 df = df.assign(train_misclass=100 - 100 * df.train_bal_acc)
@@ -176,7 +176,7 @@ plt.show()
 # Evaluation
 print(f"test_data.shape: {test_data.shape}")
 print(f"test_labels.shape: {test_labels.shape}")
-y_pred = EEGclassifier.predict(test_data)
+y_pred = EEGregressor.predict(test_data)
 # generating confusion matrix
 confusion_mat = confusion_matrix(test_labels.numpy(), y_pred)
 labels = [0.0,1.0]

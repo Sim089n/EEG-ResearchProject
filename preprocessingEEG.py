@@ -113,7 +113,9 @@ def main(create_models: bool = typer.Option(
         path_labeled_csvfiles: str = typer.Option(
             help= "Give the path to the labeled csv files you want to use for the machine learning models"),
         flag_all_phases: bool = typer.Option(
-            help="True or false depending on if we want to include all phases in the classification")
+            help="True or false depending on if we want to include all phases in the classification"),
+        label_regression: bool = typer.Option(
+            help="True or false depending on if we want to create labeled csv files for training a regression model")
         ):
     if preprocessing_needed == True:
         # Load the provided EEG dataset
@@ -223,37 +225,70 @@ def main(create_models: bool = typer.Option(
                     for index_alpha, row_alpha in alpha_features_df.iterrows():
                         timestamp_alpha = alpha_features_df.index[index_alpha]
                         if sum_time - time_diff_phase_in_seconds <= timestamp_alpha <= sum_time:
-                            if current_phase == 3:
-                                if details.iloc[index]['trust_score_binary'] == "high":
-                                    alpha_features_df.at[index_alpha, 'label'] = 1
-                                elif details.iloc[index]['trust_score_binary'] == "low":
-                                    alpha_features_df.at[index_alpha, 'label'] = 0
-                                else :
-                                    if details.iloc[index]['trust_score'] >= 4.8:
-                                        alpha_features_df.at[index_alpha, 'label'] = 1
+                            if current_phase == 3: # if we are in phase 3
+                                if details.iloc[index]['trust_score_binary'] == "high": # we check if trust is labeled high
+                                    if label_regression == True: # set the scorea as a label for training a regression model
+                                        alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
                                     else:
+                                        alpha_features_df.at[index_alpha, 'label'] = 1
+                                elif details.iloc[index]['trust_score_binary'] == "low": # if trust is labeld low
+                                    if label_regression == True: # set the scorea as a label for training a regression model
+                                        alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                    else: # otherwise set it to the corresponding binary label
                                         alpha_features_df.at[index_alpha, 'label'] = 0
+                                else : # this is the case where the trust_score is not labeled correctly so we set a own threshold
+                                    if details.iloc[index]['trust_score'] >= 4.8:
+                                        if label_regression == True: # set the scorea as a label for training a regression model
+                                            alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                        else: # otherwise set it to the corresponding binary label
+                                            alpha_features_df.at[index_alpha, 'label'] = 1
+                                    else: # if the trust score is below 4.8 we need to set it to 0 as a binary label
+                                        if label_regression == True: # set the scorea as a label for training a regression model
+                                            alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                        else: # otherwise set it to the corresponding binary label
+                                            alpha_features_df.at[index_alpha, 'label'] = 0
                             elif current_phase == 4:
                                 if details.iloc[index]['trust_score_binary'] == "high":
-                                    alpha_features_df.at[index_alpha, 'label'] = 1
-                                elif details.iloc[index]['trust_score_binary'] == "low":
-                                    alpha_features_df.at[index_alpha, 'label'] = 0
-                                else :
-                                    if details.iloc[index]['trust_score'] >= 4.8:
+                                    if label_regression == True: # set the scorea as a label for training a regression model
+                                        alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                    else: # otherwise set it to the corresponding binary label
                                         alpha_features_df.at[index_alpha, 'label'] = 1
+                                elif details.iloc[index]['trust_score_binary'] == "low":
+                                    if label_regression == True: # set the scorea as a label for training a regression model
+                                        alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                    else: # otherwise set it to the corresponding binary label
+                                        alpha_features_df.at[index_alpha, 'label'] = 0
+                                else : # this is the case where the trust_score is not labeled correctly so we set a own threshold
+                                    if details.iloc[index]['trust_score'] >= 4.8:
+                                        if label_regression == True: # set the scorea as a label for training a regression model
+                                            alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                        else: # otherwise set it to the corresponding binary label
+                                            alpha_features_df.at[index_alpha, 'label'] = 1
                                     else:
                                         alpha_features_df.at[index_alpha, 'label'] = 0
                             if flag_all_phases == True:
                                 if current_phase == 1 or current_phase == 2 or current_phase == 5:
                                     if details.iloc[index]['trust_score_binary'] == "high":
-                                        alpha_features_df.at[index_alpha, 'label'] = 1
+                                        if label_regression == True: # set the scorea as a label for training a regression model
+                                            alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                        else: # otherwise set it to the corresponding binary label
+                                            alpha_features_df.at[index_alpha, 'label'] = 1
                                     elif details.iloc[index]['trust_score_binary'] == "low":
-                                        alpha_features_df.at[index_alpha, 'label'] = 0
+                                        if label_regression == True: # set the scorea as a label for training a regression model
+                                            alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                        else: # otherwise set it to the corresponding binary label
+                                            alpha_features_df.at[index_alpha, 'label'] = 0
                                     else :
                                         if details.iloc[index]['trust_score'] >= 4.8:
-                                            alpha_features_df.at[index_alpha, 'label'] = 1
+                                            if label_regression == True: # set the scorea as a label for training a regression model
+                                                alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                            else: # otherwise set it to the corresponding binary label
+                                                alpha_features_df.at[index_alpha, 'label'] = 1
                                         else:
-                                            alpha_features_df.at[index_alpha, 'label'] = 0
+                                            if label_regression == True: # set the scorea as a label for training a regression model
+                                                alpha_features_df.at[index_alpha, 'label'] = details.iloc[index]['trust_score']
+                                            else: # otherwise set it to the corresponding binary label
+                                                alpha_features_df.at[index_alpha, 'label'] = 0
 
                     sum_time += 60
                 except Exception as e:
@@ -261,13 +296,23 @@ def main(create_models: bool = typer.Option(
             
             # Save the processed EEG data to a new CSV file
             if flag_all_phases == True:
-                if not os.path.exists(f'data/labelingAll/AllPhases_labeled_Alpha_{file_path.replace(data_path, '')}.csv'):
-                    output_file_alpha_features = (f'data/labelingAll/AllPhases_labeled_Alpha_{file_path.replace(data_path, '')}.csv')
-                    alpha_features_df.to_csv(output_file_alpha_features)
-            else:
-                if not os.path.exists(f'data/labeling3and4/labeled_Alpha_{file_path.replace(data_path, '')}.csv'):
-                    output_file_alpha_features = (f'data/labeling3and4/labeled_Alpha_{file_path.replace(data_path, '')}.csv')
-                    alpha_features_df.to_csv(output_file_alpha_features)
+                if label_regression == False:
+                    if not os.path.exists(f'data/labelingAll/AllPhases_labeled_Alpha_{file_path.replace(data_path, '')}.csv'):
+                        output_file_alpha_features = (f'data/labelingAll/AllPhases_labeled_Alpha_{file_path.replace(data_path, '')}.csv')
+                        alpha_features_df.to_csv(output_file_alpha_features)
+                elif label_regression == True:
+                    if not os.path.exists(f'data/regr_labelingAll/AllPhases_labeled_Alpha_regression_{file_path.replace(data_path, '')}.csv'):
+                        output_file_alpha_features = (f'data/regr_labelingAll/AllPhases_labeled_Alpha_regression_{file_path.replace(data_path, '')}.csv')
+                        alpha_features_df.to_csv(output_file_alpha_features)
+            elif flag_all_phases == False:
+                if label_regression == False:
+                    if not os.path.exists(f'data/labeling3and4/labeled_Alpha_{file_path.replace(data_path, '')}.csv'):
+                        output_file_alpha_features = (f'data/labeling3and4/labeled_Alpha_{file_path.replace(data_path, '')}.csv')
+                        alpha_features_df.to_csv(output_file_alpha_features)
+                elif label_regression == True:
+                    if not os.path.exists(f'data/regr_labeling3and4/labeled_Alpha_regression_{file_path.replace(data_path, '')}.csv'):
+                        output_file_alpha_features = (f'data/regr_labeling3and4/labeled_Alpha_regression_{file_path.replace(data_path, '')}.csv')
+                        alpha_features_df.to_csv(output_file_alpha_features)
 
     #-----------------End of Preprocessing -----------------#
     
