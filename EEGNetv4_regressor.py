@@ -171,7 +171,7 @@ EEGregressor = EEGRegressor(model,
                               callbacks=callbacks)
 print(train_data.shape)
 print(train_labels.shape)
-EEGregressor.fit(train_data, train_labels, epochs=7)
+EEGregressor.fit(train_data, train_labels, epochs=100)
 print(EEGregressor.history)
 # Extract loss and accuracy values for plotting from history object
 results_columns = ['mean_abs_err', 'mean_sqd_err', 'rmean_sqd_err', 'coeff_of_det']
@@ -229,8 +229,8 @@ print(f"test_data.shape: {test_data.shape}")
 print(f"test_labels.shape: {test_labels.shape}")
 y_pred = EEGregressor.predict(test_data)
 # save a table with the predicted and the actual values
-df = pd.DataFrame({'Actual': test_labels.numpy(), 'Predicted': y_pred})
-df.to_csv('predicted_actual_labels_test.csv')
+#df = pd.DataFrame({'Actual': test_labels.numpy(), 'Predicted': y_pred})
+#df.to_csv('predicted_actual_labels_test.csv')
 # generating confusion matrix
 #confusion_mat = confusion_matrix(test_labels.numpy(), y_pred)
 #labels = [0.0,1.0]
