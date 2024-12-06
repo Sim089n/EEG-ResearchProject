@@ -10,7 +10,7 @@ from torch.optim import Adam
 from sklearn.metrics import balanced_accuracy_score, accuracy_score
 from mne import create_info
 from mne.io import RawArray
-from braindecode.models import EEGNetv4
+from braindecode.models import HybridNet
 from braindecode.classifier import EEGClassifier
 from braindecode.datasets import WindowsDataset
 from torch.utils.data import TensorDataset, DataLoader
@@ -123,7 +123,7 @@ print(f"Class weights: {class_weights}")
 # Modell init
 n_classes = 2  # number of classes (in paper = 2)
 n_times = sampling_rate
-model = EEGNetv4(
+model = HybridNet(
     n_outputs=n_classes,
     n_chans=n_channels,
     n_times=sampling_rate,

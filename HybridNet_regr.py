@@ -3,24 +3,32 @@ import torch
 import pandas as pd
 import glob
 from skorch.callbacks import EpochScoring, LRScheduler
-from skorch.helper import predefined_split
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from torch.optim import Adam
-from sklearn.metrics import balanced_accuracy_score, accuracy_score
-from mne import create_info
-from mne.io import RawArray
-from braindecode.models import EEGNetv4
-from braindecode.classifier import EEGClassifier
-from braindecode.datasets import WindowsDataset
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from braindecode.training.losses import CroppedLoss
+from braindecode.models import HybridNet
+from braindecode.regressor import EEGRegressor
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix
-from braindecode.visualization import plot_confusion_matrix
+from skorch.helper import predefined_split
 
-def balanced_accuracy_multi(model, X, y):
+def mean_abs_error(model, X, y):
     y_pred = model.predict(X)
-    return balanced_accuracy_score(y.flatten(), y_pred.flatten())
+    return mean_absolute_error(y, y_pred)
+
+def mean_sqd_error(model, X, y):
+    y_pred = model.predict(X)
+    return mean_squared_error(y, y_pred)
+
+def root_mean_squared_error(model, X, y):
+    y_pred = model.predict(X)
+    return np.sqrt(mean_squared_error(y, y_pred))
+
+def coeff_of_determination(model, X, y):
+    y_pred = model.predict(X)
+    return r2_score(y, y_pred)
 
 def create_windows(df, labels, window_size=128):
     n_samples = len(df) // window_size
@@ -40,7 +48,7 @@ for file in glob.glob('data/raw/ID_*.csv'):
     # Load the first file to inspect its structure
     raw_df = pd.read_csv(file)
     # Load corresponding labeld data
-    labelAll_df = pd.read_csv('data/labelingAll/AllPhases_labeled_Alpha_' + file[file.find("ID"):]+'.csv')
+    labelAll_df = pd.read_csv('data/regr_labelingAll/AllPhases_labeled_Alpha_regression_' + file[file.find("ID"):]+'.csv')
     # write labels to the raw dataframe
     # one row in labelAll equals 1 second of data meaning 128 rows in raw_df since we have 128 Hz
     # we have to repeat the labels 128 times
@@ -58,22 +66,11 @@ for file in glob.glob('data/raw/ID_*.csv'):
 df_all_participants_raw = pd.concat(dfs_raw_with_labels)
 X = np.concatenate(all_data, axis=0)  # Combine along sample axis
 y = np.concatenate(all_labels, axis=0)
-# df_single_participant_raw = dfs_raw_with_labels[5] would be the data of one participant
-# feature vector
-#X = data_features_all[['EEG.AF3','EEG.F7','EEG.F3','EEG.FC5','EEG.T7','EEG.P7','EEG.O1','EEG.O2','EEG.P8','EEG.T8','EEG.FC6','EEG.F4','EEG.F8','EEG.AF4']].values
-#y = labels_all['label'].values
-'''
-channel_names = X.columns[0:13].tolist()  # names eeg-channels
-channel_types = ['eeg'] * n_channels  # declare them as eeg channels
-info = create_info(ch_names=channel_names, sfreq=sampling_rate, ch_types=channel_types)
-# convert X to 14 x len(X) array
-XT = X.T
-raw = RawArray(XT, info)
-'''
-# Split in train and test set
-train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
-train_data, validation_data, train_labels, validation_labels = train_test_split(train_data, train_labels, test_size=0.2, stratify=train_labels)
 
+# Split in train and test set
+train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.2, stratify=y)
+train_data, validation_data, train_labels, validation_labels = train_test_split(train_data, train_labels, test_size=0.2, stratify=train_labels)
+#n_samples, n_channels = X.shape
 
 
 n_channels = train_data.shape[1]
@@ -101,7 +98,9 @@ test_data = test_data.reshape(-1, n_channels, sampling_rate)
 # Labels anpassen
 train_labels = train_labels[:n_samples_train]
 validation_labels = validation_labels[:n_samples_validation]
+#train_labels = train_labels[::train_data.shape[2]]
 test_labels = test_labels[:n_samples_test]
+#test_labels = test_labels[::test_data.shape[2]]
 
 # Convert to PyTorch tensors
 train_data = torch.tensor(train_data, dtype=torch.float32)
@@ -121,59 +120,98 @@ print(f"Class counts: {class_counts}")
 print(f"Class weights: {class_weights}")
 
 # Modell init
-n_classes = 2  # number of classes (in paper = 2)
+n_classes = 1  # number of classes (in paper = 2)
 n_times = sampling_rate
-model = EEGNetv4(
+model = HybridNet(
     n_outputs=n_classes,
     n_chans=n_channels,
     n_times=sampling_rate,
     final_conv_length="auto",
 )
-#optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+
+#criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 # Define the scoring function: balanced accuracy
 n_epochs=7
-train_bal_acc = EpochScoring(
-    scoring=balanced_accuracy_multi,
+mean_abs_err = EpochScoring(
+    scoring=mean_abs_error,
     on_train=True,
-    name="train_bal_acc",
-    lower_is_better=False,
+    name="mean_abs_err",
+    lower_is_better=True,
 )
-callbacks = [("train_bal_acc", train_bal_acc), ("lr_scheduler", LRScheduler('CosineAnnealingLR', T_max=n_epochs - 1))]
+mean_sqd_err = EpochScoring(
+    scoring=mean_sqd_error,
+    on_train=True,
+    name="mean_sqd_err",
+    lower_is_better=True,
+)
+rmean_sqd_err = EpochScoring(
+    scoring=root_mean_squared_error,
+    on_train=True,
+    name="rmean_sqd_err",
+    lower_is_better=True,
+)
+coeff_of_det = EpochScoring(
+    scoring=coeff_of_determination,
+    on_train=True,
+    name="coeff_of_det",
+    lower_is_better=True,
+)
+callbacks = [("mean_abs_err", mean_abs_err), ("mean_sqd_err", mean_sqd_err), ("rmean_sqd_err", rmean_sqd_err), ("coeff_of_det", coeff_of_det), ("lr_scheduler", LRScheduler('CosineAnnealingLR', T_max=n_epochs - 1))]
 # train the model
-EEGclassifier = EEGClassifier(model, 
-                              criterion=criterion, 
-                              optimizer=torch.optim.Adam,
-                              lr=0.001,
-                              batch_size=16,
+EEGregressor = EEGRegressor(model, 
+                              criterion=torch.nn.MSELoss,
+                              #criterion__loss_function=torch.nn.functional.cross_entropy, 
+                              optimizer=torch.optim.AdamW,
+                              optimizer__lr=0.001,
                               train_split=predefined_split(val_dataset),
+                              batch_size=16,
                               callbacks=callbacks)
 print(train_data.shape)
 print(train_labels.shape)
-EEGclassifier.fit(train_data, train_labels, epochs=200)
-print(EEGClassifier.history)
+EEGregressor.fit(train_data, train_labels, epochs=100)
+print(EEGregressor.history)
 # Extract loss and accuracy values for plotting from history object
-results_columns = ['train_loss', 'train_bal_acc']
-df = pd.DataFrame(EEGclassifier.history[:, results_columns], columns=results_columns,
-                  index=EEGclassifier.history[:, 'epoch'])
+results_columns = ['mean_abs_err', 'mean_sqd_err', 'rmean_sqd_err', 'coeff_of_det']
+df = pd.DataFrame(EEGregressor.history[:, results_columns], columns=results_columns,
+                  index=EEGregressor.history[:, 'epoch'])
 
-# get percent of misclass for better visual comparison to loss
-df = df.assign(train_misclass=100 - 100 * df.train_bal_acc)
-
-fig, ax1 = plt.subplots(figsize=(8, 3))
-df.loc[:, ['train_loss']].plot(
+# ------------------------------------------- 1st figure ------------------------------------------------
+fig, ax1 = plt.subplots(figsize=(14, 6))
+df.loc[:, ['mean_abs_err']].plot(
     ax=ax1, style=['-'], marker='o', color='tab:blue', legend=False, fontsize=14)
-
 ax1.tick_params(axis='y', labelcolor='tab:blue', labelsize=14)
-ax1.set_ylabel("Loss", color='tab:blue', fontsize=14)
+ax1.set_ylabel("MAE", color='tab:blue', fontsize=14)
 
 ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
 
-df.loc[:, ['train_misclass']].plot(
+df.loc[:, ['mean_sqd_err']].plot(
     ax=ax2, style=['-'], marker='o', color='tab:red', legend=False)
 ax2.tick_params(axis='y', labelcolor='tab:red', labelsize=14)
-ax2.set_ylabel("Misclassification Rate [%]", color='tab:red', fontsize=14)
-ax2.set_ylim(ax2.get_ylim()[0], 85)  # make some room for legend
+ax2.set_ylabel("MSE", color='tab:red', fontsize=14)
+ax1.set_xlabel("Epoch", fontsize=14)
+
+# where some data has already been plotted to ax
+handles = []
+handles.append(Line2D([0], [0], color='black', linewidth=1, linestyle='-', label='Train'))
+plt.legend(handles, [h.get_label() for h in handles], fontsize=14)
+plt.tight_layout()
+plt.show()
+
+#---------------------------------------------- 2nd figure ------------------------------------------------
+fig, ax1 = plt.subplots(figsize=(14, 6))
+df.loc[:, ['rmean_sqd_err']].plot(
+    ax=ax1, style=['-'], marker='o', color='tab:orange', legend=False)
+ax2.tick_params(axis='y', labelcolor='tab:orange', labelsize=14)
+ax2.set_ylabel("RMSE", color='tab:orange', fontsize=14)
+
+ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+
+df.loc[:, ['coeff_of_det']].plot(
+    ax=ax2, style=['-'], marker='o', color='tab:green', legend=False)
+ax2.tick_params(axis='y', labelcolor='tab:green', labelsize=14)
+ax2.set_ylabel("CoefDet", color='tab:green', fontsize=14)
+
+#ax2.set_ylim(ax2.get_ylim()[0], 85)  # make some room for legend
 ax1.set_xlabel("Epoch", fontsize=14)
 
 # where some data has already been plotted to ax
@@ -186,14 +224,21 @@ plt.show()
 # Evaluation
 print(f"test_data.shape: {test_data.shape}")
 print(f"test_labels.shape: {test_labels.shape}")
-y_pred = EEGclassifier.predict(test_data)
+y_pred = EEGregressor.predict(test_data)
+# save a table with the predicted and the actual values
+#df = pd.DataFrame({'Actual': test_labels.numpy(), 'Predicted': y_pred})
+#df.to_csv('predicted_actual_labels_test.csv')
 # generating confusion matrix
-confusion_mat = confusion_matrix(test_labels.numpy(), y_pred)
-labels = [0.0,1.0]
+#confusion_mat = confusion_matrix(test_labels.numpy(), y_pred)
+#labels = [0.0,1.0]
 # plot the basic conf. matrix
-plot_confusion_matrix(confusion_mat, class_names=labels)
-plt.show()
-accuracy = accuracy_score(test_labels.numpy(), y_pred)
-balanced_accuracy = balanced_accuracy_score(test_labels.numpy(), y_pred)
-print(f"Accuracy: {accuracy * 100:.2f}%")
-print(f"balanced Accuracy: {balanced_accuracy * 100:.2f}%")
+#plot_confusion_matrix(confusion_mat, class_names=labels)
+#plt.show()
+Mean_Sqd_Error = mean_squared_error(test_labels.numpy(), y_pred)
+Mean_Abs_Error = mean_absolute_error(test_labels.numpy(), y_pred)
+Root_Mean_Sqd_Error = np.sqrt(mean_squared_error(test_labels.numpy(), y_pred))
+Coefficients_of_Determination = r2_score(test_labels.numpy(), y_pred)
+print(f"Mean Absolute Error: {Mean_Abs_Error :.2f}%")
+print(f"Mean Squared Error: {Mean_Sqd_Error :.2f}%")
+print(f"Root Mean Squared Error: {Root_Mean_Sqd_Error :.2f}%")
+print(f"Coefficients of Determination: {Coefficients_of_Determination :.2f}")
