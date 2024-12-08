@@ -70,8 +70,6 @@ y = np.concatenate(all_labels, axis=0)
 # Split in train and test set
 train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.2, stratify=y)
 train_data, validation_data, train_labels, validation_labels = train_test_split(train_data, train_labels, test_size=0.2, stratify=train_labels)
-#n_samples, n_channels = X.shape
-
 
 n_channels = train_data.shape[1]
 
@@ -98,9 +96,7 @@ test_data = test_data.reshape(-1, n_channels, sampling_rate)
 # Labels anpassen
 train_labels = train_labels[:n_samples_train]
 validation_labels = validation_labels[:n_samples_validation]
-#train_labels = train_labels[::train_data.shape[2]]
 test_labels = test_labels[:n_samples_test]
-#test_labels = test_labels[::test_data.shape[2]]
 
 # Convert to PyTorch tensors
 train_data = torch.tensor(train_data, dtype=torch.float32)
@@ -113,12 +109,6 @@ test_labels = torch.tensor(test_labels, dtype=torch.long)
 val_dataset = TensorDataset(validation_data, validation_labels)
 val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
 
-class_counts = np.bincount(train_labels)
-class_weights = 1.0 / class_counts
-class_weights = torch.tensor(class_weights, dtype=torch.float32)
-print(f"Class counts: {class_counts}")
-print(f"Class weights: {class_weights}")
-
 # Modell init
 n_classes = 1  # number of classes (in paper = 2)
 n_times = sampling_rate
@@ -126,10 +116,8 @@ model = HybridNet(
     n_outputs=n_classes,
     n_chans=n_channels,
     n_times=sampling_rate,
-    final_conv_length="auto",
 )
 
-#criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
 # Define the scoring function: balanced accuracy
 n_epochs=7
 mean_abs_err = EpochScoring(
@@ -168,10 +156,10 @@ EEGregressor = EEGRegressor(model,
                               callbacks=callbacks)
 print(train_data.shape)
 print(train_labels.shape)
-EEGregressor.fit(train_data, train_labels, epochs=100)
+EEGregressor.fit(train_data, train_labels, epochs=1)
 print(EEGregressor.history)
 # Extract loss and accuracy values for plotting from history object
-results_columns = ['mean_abs_err', 'mean_sqd_err', 'rmean_sqd_err', 'coeff_of_det']
+results_columns = ['mean_abs_err', 'mean_sqd_err', 'rmean_sqd_err', 'coeff_of_det', 'valid_acc', 'valid_loss']
 df = pd.DataFrame(EEGregressor.history[:, results_columns], columns=results_columns,
                   index=EEGregressor.history[:, 'epoch'])
 
@@ -201,8 +189,8 @@ plt.show()
 fig, ax1 = plt.subplots(figsize=(14, 6))
 df.loc[:, ['rmean_sqd_err']].plot(
     ax=ax1, style=['-'], marker='o', color='tab:orange', legend=False)
-ax2.tick_params(axis='y', labelcolor='tab:orange', labelsize=14)
-ax2.set_ylabel("RMSE", color='tab:orange', fontsize=14)
+ax1.tick_params(axis='y', labelcolor='tab:orange', labelsize=14)
+ax1.set_ylabel("RMSE", color='tab:orange', fontsize=14)
 
 ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
 
@@ -210,8 +198,6 @@ df.loc[:, ['coeff_of_det']].plot(
     ax=ax2, style=['-'], marker='o', color='tab:green', legend=False)
 ax2.tick_params(axis='y', labelcolor='tab:green', labelsize=14)
 ax2.set_ylabel("CoefDet", color='tab:green', fontsize=14)
-
-#ax2.set_ylim(ax2.get_ylim()[0], 85)  # make some room for legend
 ax1.set_xlabel("Epoch", fontsize=14)
 
 # where some data has already been plotted to ax
@@ -221,19 +207,32 @@ plt.legend(handles, [h.get_label() for h in handles], fontsize=14)
 plt.tight_layout()
 plt.show()
 
-# Evaluation
+# -------------------------------------------- 3rd figure ------------------------------------------------
+fig, ax1 = plt.subplots(figsize=(14, 6))
+df.loc[:, ['valid_loss']].plot(
+    ax=ax1, style=['-'], marker='o', color='tab:red', legend=False)
+ax1.tick_params(axis='y', labelcolor='tab:red', labelsize=14)
+ax1.set_ylabel("Validation Loss", color='tab:red', fontsize=14)
+
+ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+
+df.loc[:, ['valid_acc']].plot(
+    ax=ax2, style=['-'], marker='o', color='tab:green', legend=False)
+ax2.tick_params(axis='y', labelcolor='tab:green', labelsize=14)
+ax2.set_ylabel("Validation Accuracy", color='tab:green', fontsize=14)
+ax1.set_xlabel("Epoch", fontsize=14)
+
+# where some data has already been plotted to ax
+handles = []
+handles.append(Line2D([0], [0], color='black', linewidth=1, linestyle='-', label='Train'))
+plt.legend(handles, [h.get_label() for h in handles], fontsize=14)
+plt.tight_layout()
+plt.show()
+
+# -------------------------------------------- Evaluation ------------------------------------------------
 print(f"test_data.shape: {test_data.shape}")
 print(f"test_labels.shape: {test_labels.shape}")
 y_pred = EEGregressor.predict(test_data)
-# save a table with the predicted and the actual values
-#df = pd.DataFrame({'Actual': test_labels.numpy(), 'Predicted': y_pred})
-#df.to_csv('predicted_actual_labels_test.csv')
-# generating confusion matrix
-#confusion_mat = confusion_matrix(test_labels.numpy(), y_pred)
-#labels = [0.0,1.0]
-# plot the basic conf. matrix
-#plot_confusion_matrix(confusion_mat, class_names=labels)
-#plt.show()
 Mean_Sqd_Error = mean_squared_error(test_labels.numpy(), y_pred)
 Mean_Abs_Error = mean_absolute_error(test_labels.numpy(), y_pred)
 Root_Mean_Sqd_Error = np.sqrt(mean_squared_error(test_labels.numpy(), y_pred))

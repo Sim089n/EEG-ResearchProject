@@ -150,20 +150,35 @@ EEGclassifier = EEGClassifier(model,
                               callbacks=callbacks)
 print(train_data.shape)
 print(train_labels.shape)
-EEGclassifier.fit(train_data, train_labels, epochs=200)
+EEGclassifier.fit(train_data, train_labels, epochs=2)
 print(EEGClassifier.history)
 # Extract loss and accuracy values for plotting from history object
-results_columns = ['train_loss', 'train_bal_acc']
+results_columns = ['train_loss', 'train_bal_acc', 'valid_acc', 'valid_loss']
 df = pd.DataFrame(EEGclassifier.history[:, results_columns], columns=results_columns,
                   index=EEGclassifier.history[:, 'epoch'])
 
+# ------------------------------------------- 1st figure ------------------------------------------------
+# plot train_bal_acc
+fig, ax1 = plt.subplots(figsize=(14, 6))
+df.loc[:, ['train_bal_acc']].plot(
+    ax=ax1, style=['-'], marker='o', color='tab:red', legend=False, fontsize=14)
+ax1.tick_params(axis='y', labelcolor='tab:red', labelsize=14)
+ax1.set_ylabel("Balanced Accuracy", color='tab:red', fontsize=14)
+ax1.set_xlabel("Epoch", fontsize=14)
+# where some data has already been plotted to ax
+handles = []
+handles.append(Line2D([0], [0], color='black', linewidth=1, linestyle='-', label='Train'))
+plt.legend(handles, [h.get_label() for h in handles], fontsize=14)
+plt.tight_layout()
+plt.show()
+
+# ------------------------------------------- 2nd figure ------------------------------------------------
 # get percent of misclass for better visual comparison to loss
 df = df.assign(train_misclass=100 - 100 * df.train_bal_acc)
 
-fig, ax1 = plt.subplots(figsize=(8, 3))
+fig, ax1 = plt.subplots(figsize=(14, 6))
 df.loc[:, ['train_loss']].plot(
     ax=ax1, style=['-'], marker='o', color='tab:blue', legend=False, fontsize=14)
-
 ax1.tick_params(axis='y', labelcolor='tab:blue', labelsize=14)
 ax1.set_ylabel("Loss", color='tab:blue', fontsize=14)
 
@@ -183,7 +198,29 @@ plt.legend(handles, [h.get_label() for h in handles], fontsize=14)
 plt.tight_layout()
 plt.show()
 
-# Evaluation
+# ------------------------------------------- 3rd figure ------------------------------------------------
+fig, ax1 = plt.subplots(figsize=(14, 6))
+df.loc[:, ['valid_acc']].plot(
+    ax=ax1, style=['-'], marker='o', color='tab:green', legend=False, fontsize=14)
+ax1.tick_params(axis='y', labelcolor='tab:green', labelsize=14)
+ax1.set_ylabel("Validation Accuracy", color='tab:green', fontsize=14)
+
+ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+
+df.loc[:, ['valid_loss']].plot(
+    ax=ax2, style=['-'], marker='o', color='tab:orange', legend=False)
+ax2.tick_params(axis='y', labelcolor='tab:orange', labelsize=14)
+ax2.set_ylabel("Validation Loss", color='tab:orange', fontsize=14)
+ax1.set_xlabel("Epoch", fontsize=14)
+
+# where some data has already been plotted to ax
+handles = []
+handles.append(Line2D([0], [0], color='black', linewidth=1, linestyle='-', label='Train'))
+plt.legend(handles, [h.get_label() for h in handles], fontsize=14)
+plt.tight_layout()
+plt.show()
+
+# -------------------------------------------- Evaluation ------------------------------------------------
 print(f"test_data.shape: {test_data.shape}")
 print(f"test_labels.shape: {test_labels.shape}")
 y_pred = EEGclassifier.predict(test_data)
