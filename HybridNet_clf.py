@@ -71,7 +71,7 @@ XT = X.T
 raw = RawArray(XT, info)
 '''
 # Split in train and test set
-train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.25, random_state=42, stratify=y)
+train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.1, random_state=42, stratify=y)
 train_data, validation_data, train_labels, validation_labels = train_test_split(train_data, train_labels, test_size=0.2, stratify=train_labels)
 
 

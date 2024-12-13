@@ -52,7 +52,7 @@ def bandpower(psd, freqs, band):
     band_freqs = np.logical_and(freqs >= band[0], freqs <= band[1])
     return np.sum(psd[band_freqs])
 # Define a high-pass filter with 0.16 Hz cutoff
-def butter_highpass(cutoff, fs, order=5):
+def butterworth_highpass(cutoff, fs, order=5):
     nyquist = 0.5 * fs
     normal_cutoff = cutoff / nyquist
     b, a = butter(order, normal_cutoff, btype='high', analog=False)
@@ -60,7 +60,7 @@ def butter_highpass(cutoff, fs, order=5):
 
 # Apply high-pass filter to the EEG data
 def highpass_filter(data, cutoff, fs, order=5):
-    b, a = butter_highpass(cutoff, fs, order=order)
+    b, a = butterworth_highpass(cutoff, fs, order=order)
     return filtfilt(b, a, data)
 
 # Define frequency bands of interest
@@ -344,7 +344,7 @@ def main(create_models: bool = typer.Option(
         alpha_df['label'].value_counts().plot(kind='bar')
         os.makedirs(os.path.dirname('plots/'), exist_ok=True)
         plt.savefig('plots/value_counts_trust_classes.png')
-        plt.show(block=False)
+        plt.show()
         # Split dataset into training set and test set
         X = alpha_df[['Mean', 'Peak', 'Std', 'Kurtosis']]  # Features
         y = alpha_df['label']  # Labels

@@ -14,6 +14,8 @@ from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 from skorch.helper import predefined_split
 
+# TO DO: save the models and the missclassified rows
+
 def mean_abs_error(model, X, y):
     y_pred = model.predict(X)
     return mean_absolute_error(y, y_pred)
@@ -68,7 +70,7 @@ X = np.concatenate(all_data, axis=0)  # Combine along sample axis
 y = np.concatenate(all_labels, axis=0)
 
 # Split in train and test set
-train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.2, stratify=y)
+train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.1, stratify=y)
 train_data, validation_data, train_labels, validation_labels = train_test_split(train_data, train_labels, test_size=0.2, stratify=train_labels)
 
 n_channels = train_data.shape[1]

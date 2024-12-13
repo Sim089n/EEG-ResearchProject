@@ -71,7 +71,7 @@ X = np.concatenate(all_data, axis=0)  # Combine along sample axis
 y = np.concatenate(all_labels, axis=0)
 
 # Split in train and test set
-train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.2, stratify=y)
+train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.1, stratify=y)
 train_data, validation_data, train_labels, validation_labels = train_test_split(train_data, train_labels, test_size=0.2, stratify=train_labels)
 
 n_channels = train_data.shape[1]
@@ -111,20 +111,17 @@ train_labels = torch.tensor(train_labels, dtype=torch.long)
 validation_labels = torch.tensor(validation_labels, dtype=torch.long)
 test_labels = torch.tensor(test_labels, dtype=torch.long)
 
+train_labels = train_labels.unsqueeze(-1)
+validation_labels = validation_labels.unsqueeze(-1)
+test_labels = test_labels.unsqueeze(-1)
+
 val_dataset = TensorDataset(validation_data, validation_labels)
 val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
 
-class_counts = np.bincount(train_labels)
-class_weights = 1.0 / class_counts
-class_weights = torch.tensor(class_weights, dtype=torch.float32)
-print(f"Class counts: {class_counts}")
-print(f"Class weights: {class_weights}")
-
 # Modell init
-n_classes = 1  # number of classes (in paper = 2)
 n_times = sampling_rate
 model = EEGNetv4(
-    n_outputs=n_classes,
+    n_outputs=1,
     n_chans=n_channels,
     n_times=sampling_rate,
     final_conv_length="auto",
@@ -159,19 +156,19 @@ coeff_of_det = EpochScoring(
 callbacks = [("mean_abs_err", mean_abs_err), ("mean_sqd_err", mean_sqd_err), ("rmean_sqd_err", rmean_sqd_err), ("coeff_of_det", coeff_of_det), ("lr_scheduler", LRScheduler('CosineAnnealingLR', T_max=n_epochs - 1))]
 # train the model
 EEGregressor = EEGRegressor(model, 
-                              criterion=torch.nn.MSELoss,
-                              #criterion__loss_function=torch.nn.functional.cross_entropy, 
+                              criterion=torch.nn.MSELoss, 
                               optimizer=torch.optim.AdamW,
-                              optimizer__lr=0.001,
+                              optimizer__lr=0.01,
                               train_split=predefined_split(val_dataset),
                               batch_size=16,
                               callbacks=callbacks)
-print(train_data.shape)
-print(train_labels.shape)
-EEGregressor.fit(train_data, train_labels, epochs=100)
-print(EEGregressor.history)
+# Fit the model
+EEGregressor.fit(train_data, train_labels, epochs=200)
+# save the model
+torch.save(EEGregressor, 'data/models/EEGNetv4_regressor.pth')
+torch.save(model, 'data/models/model.pth')
 # Extract loss and accuracy values for plotting from history object
-results_columns = ['mean_abs_err', 'mean_sqd_err', 'rmean_sqd_err', 'coeff_of_det', 'valid_acc', 'valid_loss']
+results_columns = ['mean_abs_err', 'mean_sqd_err', 'rmean_sqd_err', 'coeff_of_det', 'valid_loss']
 df = pd.DataFrame(EEGregressor.history[:, results_columns], columns=results_columns,
                   index=EEGregressor.history[:, 'epoch'])
 
@@ -226,12 +223,12 @@ df.loc[:, ['valid_loss']].plot(
 ax1.tick_params(axis='y', labelcolor='tab:red', labelsize=14)
 ax1.set_ylabel("Validation Loss", color='tab:red', fontsize=14)
 
-ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+#ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
 
-df.loc[:, ['valid_acc']].plot(
-    ax=ax2, style=['-'], marker='o', color='tab:green', legend=False)
-ax2.tick_params(axis='y', labelcolor='tab:green', labelsize=14)
-ax2.set_ylabel("Validation Accuracy", color='tab:green', fontsize=14)
+#df.loc[:, ['valid_acc']].plot(
+#    ax=ax2, style=['-'], marker='o', color='tab:green', legend=False)
+#ax2.tick_params(axis='y', labelcolor='tab:green', labelsize=14)
+#ax2.set_ylabel("Validation Accuracy", color='tab:green', fontsize=14)
 ax1.set_xlabel("Epoch", fontsize=14)
 
 # where some data has already been plotted to ax
