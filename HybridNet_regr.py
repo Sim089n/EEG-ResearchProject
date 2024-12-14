@@ -14,8 +14,6 @@ from torch.utils.data import TensorDataset, DataLoader
 from sklearn.model_selection import train_test_split
 from skorch.helper import predefined_split
 
-# TO DO: save the models and the missclassified rows
-
 def mean_abs_error(model, X, y):
     y_pred = model.predict(X)
     return mean_absolute_error(y, y_pred)
@@ -156,10 +154,12 @@ EEGregressor = EEGRegressor(model,
                               train_split=predefined_split(val_dataset),
                               batch_size=16,
                               callbacks=callbacks)
-print(train_data.shape)
-print(train_labels.shape)
+
 EEGregressor.fit(train_data, train_labels, epochs=1)
-print(EEGregressor.history)
+
+# save models
+torch.save(EEGregressor, 'data/models/HybridNet_regressor.pth')
+torch.save(model, 'data/models/model_hybridnet_regression.pth')
 # Extract loss and accuracy values for plotting from history object
 results_columns = ['mean_abs_err', 'mean_sqd_err', 'rmean_sqd_err', 'coeff_of_det', 'valid_acc', 'valid_loss']
 df = pd.DataFrame(EEGregressor.history[:, results_columns], columns=results_columns,

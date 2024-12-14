@@ -58,22 +58,10 @@ for file in glob.glob('data/raw/ID_*.csv'):
 df_all_participants_raw = pd.concat(dfs_raw_with_labels)
 X = np.concatenate(all_data, axis=0)  # Combine along sample axis
 y = np.concatenate(all_labels, axis=0)
-# df_single_participant_raw = dfs_raw_with_labels[5] would be the data of one participant
 # feature vector
-#X = data_features_all[['EEG.AF3','EEG.F7','EEG.F3','EEG.FC5','EEG.T7','EEG.P7','EEG.O1','EEG.O2','EEG.P8','EEG.T8','EEG.FC6','EEG.F4','EEG.F8','EEG.AF4']].values
-#y = labels_all['label'].values
-'''
-channel_names = X.columns[0:13].tolist()  # names eeg-channels
-channel_types = ['eeg'] * n_channels  # declare them as eeg channels
-info = create_info(ch_names=channel_names, sfreq=sampling_rate, ch_types=channel_types)
-# convert X to 14 x len(X) array
-XT = X.T
-raw = RawArray(XT, info)
-'''
 # Split in train and test set
 train_data, test_data, train_labels, test_labels = train_test_split(X, y, test_size=0.1, random_state=42, stratify=y)
 train_data, validation_data, train_labels, validation_labels = train_test_split(train_data, train_labels, test_size=0.2, stratify=train_labels)
-
 
 
 n_channels = train_data.shape[1]
@@ -148,10 +136,13 @@ EEGclassifier = EEGClassifier(model,
                               batch_size=16,
                               train_split=predefined_split(val_dataset),
                               callbacks=callbacks)
-print(train_data.shape)
-print(train_labels.shape)
+
 EEGclassifier.fit(train_data, train_labels, epochs=2)
-print(EEGClassifier.history)
+
+# save the model
+torch.save(EEGclassifier, 'data/models/EEGNetv4_classifier.pth')
+torch.save(model, 'data/models/model_eegnet_clf.pth')
+
 # Extract loss and accuracy values for plotting from history object
 results_columns = ['train_loss', 'train_bal_acc', 'valid_acc', 'valid_loss']
 df = pd.DataFrame(EEGclassifier.history[:, results_columns], columns=results_columns,

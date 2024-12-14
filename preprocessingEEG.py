@@ -137,17 +137,17 @@ def main(create_models: bool = typer.Option(
             # Display the first few rows of the data to inspect its structure
             eeg_data.head(), eeg_data.info()
 
-            # Apply the filter to all EEG channels
-            eeg_channels = eeg_data.columns[:-1]  # Exclude the Time column
+            # Apply filter to data
+            eeg_channels = eeg_data.columns[:-1]  # Exclude Time col
             filtered_data = eeg_data[eeg_channels].apply(lambda x: highpass_filter(x, cutoff_freq, fs))
 
             # Display filtered data (first few rows)
             filtered_data.head()
 
-            # Apply ICA to remove artifacts from the filtered EEG data
+            # ICA
             ica = FastICA(n_components=len(eeg_channels))
 
-            # Fit ICA to the filtered data and transform it
+            # Fit ICA to filtered data and transform it
             ica_data = ica.fit_transform(filtered_data)
 
             # Convert the result back to a DataFrame
@@ -157,7 +157,7 @@ def main(create_models: bool = typer.Option(
             # Display the first few rows of the ICA-processed data
             ica_df.head()
 
-            # Apply Hanning window function
+            # create hann window
             window = hann(len(ica_df))
 
             # Sampling frequency

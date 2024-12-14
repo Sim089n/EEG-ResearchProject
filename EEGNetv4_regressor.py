@@ -156,17 +156,17 @@ coeff_of_det = EpochScoring(
 callbacks = [("mean_abs_err", mean_abs_err), ("mean_sqd_err", mean_sqd_err), ("rmean_sqd_err", rmean_sqd_err), ("coeff_of_det", coeff_of_det), ("lr_scheduler", LRScheduler('CosineAnnealingLR', T_max=n_epochs - 1))]
 # train the model
 EEGregressor = EEGRegressor(model, 
-                              criterion=torch.nn.MSELoss, 
+                              criterion=torch.nn.HuberLoss, 
                               optimizer=torch.optim.AdamW,
-                              optimizer__lr=0.01,
+                              optimizer__lr=0.001,
                               train_split=predefined_split(val_dataset),
                               batch_size=16,
                               callbacks=callbacks)
 # Fit the model
 EEGregressor.fit(train_data, train_labels, epochs=200)
 # save the model
-torch.save(EEGregressor, 'data/models/EEGNetv4_regressor.pth')
-torch.save(model, 'data/models/model.pth')
+torch.save(EEGregressor, 'data/models/141224_EEGNetv4_regressor.pth')
+torch.save(model, 'data/models/141224_model_eegnet_regr.pth')
 # Extract loss and accuracy values for plotting from history object
 results_columns = ['mean_abs_err', 'mean_sqd_err', 'rmean_sqd_err', 'coeff_of_det', 'valid_loss']
 df = pd.DataFrame(EEGregressor.history[:, results_columns], columns=results_columns,
